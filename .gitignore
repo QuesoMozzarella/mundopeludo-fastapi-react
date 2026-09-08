@@ -1,0 +1,41 @@
+# === NODE & VITE ===
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# === PYTHON ===
+*.py[cod]
+*$py.class
+__pycache__/
+*.so
+.Python
+backend/__pycache__/
+.pytest_cache/
+
+# === ENTORNOS VIRTUALES ===
+.env
+.venv
+env/
+venv/
+ENV/
+.MundoPeludoEnv/
+
+# === BASES DE DATOS TEMPORALES ===
+*.log
+*.sqlite3-journal
+
+# === CARPETA LEGACY DJANGO (Aislada para no afectar el repo original) ===
+legacy_django/
+
+# === ARCHIVOS DE SISTEMA ===
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# === IDEs ===
+.idea/
+.vscode/
+*.swp
+*.swo
+*~

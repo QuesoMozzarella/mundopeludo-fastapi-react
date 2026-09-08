@@ -1,0 +1,8 @@
+{
+  "name": "Mundo Peludo - Clínica Veterinaria",
+  "description": "Mundo Peludo - Clínica veterinaria de confianza. Atención profesional, citas, mascotas, adopciones, historiales médicos y tienda.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

@@ -1,0 +1,70 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-primary: #1d95c8;
+  --color-brand-primary-dark: #156a8e;
+  --color-brand-primary-darker: #1d4f60;
+  --color-brand-secondary: #ff9f43;
+  --color-brand-secondary-dark: #f08e30;
+  --color-brand-accent: #5dca88;
+  --color-brand-info: #00bcd4;
+  --color-brand-info-dark: #0097a7;
+  --color-brand-bg: #f7fbfe;
+  --color-brand-light: #9dddf5;
+  --color-brand-warm: #fff5e6;
+  --font-sans: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, 'Roboto', 'Plus Jakarta Sans', sans-serif;
+  --font-heading: 'Outfit', 'Segoe UI', system-ui, sans-serif;
+}
+
+:root {
+  /* Legacy MundoPeludo original CSS Variables */
+  --color-primary: #1d95c8;
+  --color-primary-dark: #156a8e;
+  --color-primary-darker: #1d4f60;
+  --color-secondary: #ff9f43;
+  --color-secondary-dark: #f08e30;
+  --color-accent: #5dca88;
+  --color-info: #00bcd4;
+  --color-info-dark: #0097a7;
+  --color-bg-main: #f7fbfe;
+  --color-bg-light: #9dddf5;
+  --color-bg-warm: #fff5e6;
+  --color-bg-white: #ffffff;
+  --color-bg-dark: #1d4f60;
+  --color-text: #333333;
+  --color-text-white: #ffffff;
+  --font-family: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, 'Roboto', 'Plus Jakarta Sans', sans-serif;
+}
+
+body {
+  background-color: var(--color-bg-main);
+  color: var(--color-text);
+  font-family: var(--font-family);
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-family);
+}
+
+/* Legacy Card accent */
+.card-mundo {
+  background-color: #ffffff;
+  border-radius: 12px;
+  border-top: 4px solid var(--color-primary);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.card-mundo:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.08);
+}
+
+/* Highlight box matching legacy */
+.highlight-box {
+  background-color: var(--color-bg-warm);
+  border-left: 4px solid var(--color-secondary);
+  padding: 1rem;
+  border-radius: 0 8px 8px 0;
+}
+
