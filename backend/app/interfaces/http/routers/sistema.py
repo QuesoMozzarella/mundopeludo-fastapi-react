@@ -20,7 +20,12 @@ def salud() -> SaludOut:
     return SaludOut(version=VERSION)
 
 
-@router.get("/actividad", response_model=list[ActividadOut], summary="Bitácora del sistema")
+@router.get(
+    "/actividad",
+    response_model=list[ActividadOut],
+    summary="Bitácora del sistema",
+    dependencies=[SoloPersonal],
+)
 def listar_actividad(
     repos: ReposDep, limite: int = 50, tipo: str | None = None
 ) -> list[ActividadOut]:
@@ -41,7 +46,12 @@ def registrar_actividad(
     return ActividadOut.desde(caso.ejecutar(datos.usuario, datos.tipo, datos.descripcion))
 
 
-@router.get("/dashboard/stats", response_model=EstadisticasOut, summary="Indicadores del panel")
+@router.get(
+    "/dashboard/stats",
+    response_model=EstadisticasOut,
+    summary="Indicadores del panel",
+    dependencies=[SoloPersonal],
+)
 def estadisticas(repos: ReposDep, servicios: ServiciosDep) -> EstadisticasOut:
     caso = ObtenerEstadisticas(
         repos.usuarios,

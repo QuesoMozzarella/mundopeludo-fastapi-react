@@ -7,7 +7,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ...domain.errors import AuthenticationError, ConflictError, NotFoundError, ValidationError
+from ...domain.errors import (
+    AuthenticationError,
+    ConflictError,
+    IntentoFallidoError,
+    NotFoundError,
+    ValidationError,
+)
 from ...domain.model.sistema import ActividadSistema, CodigoRecuperacion
 from ...domain.model.usuario import PerfilCliente, PerfilVeterinario, Usuario
 from ...domain.ports.repositories import (
@@ -57,7 +63,7 @@ class RegistrarUsuario:
         apellidos: str,
         telefono: str | None = None,
         direccion: str | None = None,
-        tipo: str = "cliente",
+        tipo: TipoUsuario | str = TipoUsuario.CLIENTE,
         documento: str | None = None,
         especialidades_ids: list[int] | None = None,
     ) -> Usuario:
@@ -147,7 +153,9 @@ class AutenticarUsuario:
                     fecha=self.reloj.ahora(),
                 )
             )
-        return SesionIniciada(usuario=usuario, token=token, expira_en_minutos=getattr(self.tokens, "minutos_vigencia", 720))
+        return SesionIniciada(
+            usuario=usuario, token=token, expira_en_minutos=self.tokens.minutos_vigencia
+        )
 
 
 class ObtenerUsuarioDesdeToken:
@@ -215,13 +223,18 @@ class RestablecerPassword:
         if usuario is None:
             raise AuthenticationError("Código de recuperación inválido")
 
-        registro = self.codigos.obtener_vigente(usuario.id, codigo)
+        # Se busca el código activo del usuario y se compara aquí: si se
+        # buscara por el valor exacto, un código erróneo nunca sumaría un
+        # intento y el límite de MAX_INTENTOS_CODIGO no frenaría la fuerza bruta.
+        registro = self.codigos.obtener_activo(usuario.id)
         if registro is None:
             raise AuthenticationError("Código de recuperación inválido")
         if not registro.es_utilizable(self.reloj.ahora()):
+            raise AuthenticationError("El código expiró o se agotaron los intentos")
+        if not registro.coincide(codigo):
             registro.incrementar_intento()
             self.codigos.actualizar(registro)
-            raise AuthenticationError("El código expiró o se agotaron los intentos")
+            raise IntentoFallidoError("Código de recuperación inválido")
 
         registro.consumir()
         self.codigos.actualizar(registro)
@@ -254,7 +267,3 @@ def validar_password(password: str) -> None:
         )
     if password.isdigit():
         raise ValidationError("La contraseña no puede ser sólo numérica", "password")
-
-
-def tipo_usuario(valor: str) -> TipoUsuario:
-    return TipoUsuario.desde(valor, campo="tipo")

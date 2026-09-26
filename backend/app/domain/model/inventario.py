@@ -145,6 +145,12 @@ class Producto:
         return self.fecha_vencimiento < date.today()
 
     # --- comportamiento ---
+    def sirve_para(self, animal: TipoAnimal) -> bool:
+        """Un producto para `ambos` o `todos` también sirve para cada animal."""
+        if animal is TipoAnimal.TODOS:
+            return True
+        return self.tipo_animal in (animal, TipoAnimal.AMBOS, TipoAnimal.TODOS)
+
     def sku_base(self) -> str:
         """Base del SKU (`PREFIJO-ABREV`), como el `_generate_sku()` original."""
         prefijo = PREFIJOS_SKU.get(self.categoria, "PRD")

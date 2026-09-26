@@ -381,7 +381,8 @@ class CodigoRecuperacionRepository(ABC):
     def actualizar(self, codigo: CodigoRecuperacion) -> CodigoRecuperacion: ...
 
     @abstractmethod
-    def obtener_vigente(self, usuario_id: int, codigo: str) -> CodigoRecuperacion | None: ...
+    def obtener_activo(self, usuario_id: int) -> CodigoRecuperacion | None:
+        """Último código activo del usuario, sea cual sea su valor."""
 
     @abstractmethod
     def desactivar_todos(self, usuario_id: int) -> None: ...

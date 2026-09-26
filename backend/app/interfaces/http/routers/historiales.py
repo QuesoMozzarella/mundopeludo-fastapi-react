@@ -8,7 +8,7 @@ from ....application.use_cases.historiales import (
     ConsultarHistoriales,
     RegistrarHistorial,
 )
-from ..deps import ReposDep, ServiciosDep, SoloPersonal
+from ..deps import AccesoDep, ReposDep, ServiciosDep, SoloPersonal
 from ..schemas.citas import HistorialActualizarIn, HistorialIn, HistorialOut
 
 router = APIRouter(prefix="/api", tags=["historiales médicos"])
@@ -23,10 +23,12 @@ def _consulta(repos: ReposDep) -> ConsultarHistoriales:
 )
 def listar(
     repos: ReposDep,
+    acceso: AccesoDep,
     mascota_id: int | None = None,
     veterinario_id: int | None = None,
     cliente_id: int | None = None,
 ) -> list[HistorialOut]:
+    cliente_id = acceso.filtro_propio(cliente_id)
     return [
         HistorialOut.desde(v)
         for v in _consulta(repos).listar(mascota_id, veterinario_id, cliente_id)
@@ -36,8 +38,10 @@ def listar(
 @router.get(
     "/historiales-medicos/{historial_id}", response_model=HistorialOut, summary="Ver un historial"
 )
-def obtener(historial_id: int, repos: ReposDep) -> HistorialOut:
-    return HistorialOut.desde(_consulta(repos).obtener(historial_id))
+def obtener(historial_id: int, repos: ReposDep, acceso: AccesoDep) -> HistorialOut:
+    vista = _consulta(repos).obtener(historial_id)
+    acceso.propietario(vista.cliente_id)
+    return HistorialOut.desde(vista)
 
 
 @router.post(
@@ -84,11 +88,12 @@ def eliminar(historial_id: int, repos: ReposDep) -> None:
 )
 def listar_alias(
     repos: ReposDep,
+    acceso: AccesoDep,
     mascota_id: int | None = None,
     veterinario_id: int | None = None,
     cliente_id: int | None = None,
 ) -> list[HistorialOut]:
-    return listar(repos, mascota_id, veterinario_id, cliente_id)
+    return listar(repos, acceso, mascota_id, veterinario_id, cliente_id)
 
 
 @router.post(

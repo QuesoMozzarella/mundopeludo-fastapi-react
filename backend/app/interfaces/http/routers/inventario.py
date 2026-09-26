@@ -45,8 +45,12 @@ def listar_productos(
     solo_activos: bool = True,
     solo_online: bool | None = None,
     stock_bajo: bool = False,
+    tipo_animal: str | None = None,
+    search: str | None = Query(default=None, include_in_schema=False),
 ) -> list[ProductoOut]:
-    vistas = _consulta(repos).listar(categoria, buscar, solo_activos, solo_online, stock_bajo)
+    vistas = _consulta(repos).listar(
+        categoria, buscar or search, solo_activos, solo_online, stock_bajo, tipo_animal
+    )
     return [ProductoOut.desde(v) for v in vistas]
 
 

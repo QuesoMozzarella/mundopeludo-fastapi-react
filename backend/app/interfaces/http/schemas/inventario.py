@@ -215,6 +215,9 @@ class CheckoutIn(BaseModel):
     usuario_id: int
     metodo_pago: str = "efectivo"
     direccion: str | None = None
+    # Compra directa: si viene, se compran estos items y el carrito guardado
+    # no se toca. El cliente SPA gestiona el carrito en el navegador.
+    items: list[ItemCarritoIn] | None = None
 
 
 class PedidoItemOut(BaseModel):
@@ -227,6 +230,7 @@ class PedidoItemOut(BaseModel):
 
 class PedidoOut(BaseModel):
     id: int
+    pedido_id: int  # alias de `id`: nombre que usaba la API anterior
     usuario_id: int
     total: float
     metodo_pago: str
@@ -239,6 +243,7 @@ class PedidoOut(BaseModel):
     def desde(cls, pedido: Pedido) -> "PedidoOut":
         return cls(
             id=pedido.id,
+            pedido_id=pedido.id,
             usuario_id=pedido.usuario_id,
             total=pedido.total,
             metodo_pago=pedido.metodo_pago,

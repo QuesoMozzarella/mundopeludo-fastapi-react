@@ -13,8 +13,10 @@ from ....application.use_cases.citas import (
     GestionarDisponibilidad,
     GestionarEstadosCita,
     GestionarServicios,
+    ReglasDeAgenda,
 )
-from ..deps import ReposDep, ServiciosDep, SoloAdmin, SoloPersonal
+from ....application.use_cases.mascotas import ConsultarMascotas
+from ..deps import AccesoDep, ReposDep, ServiciosDep, SoloAdmin, SoloPersonal
 from ..schemas.citas import (
     CambioEstadoIn,
     CitaActualizarIn,
@@ -41,6 +43,20 @@ def _consulta(repos: ReposDep) -> ConsultarCitas:
         repos.estados_cita,
         repos.historiales,
     )
+
+
+def _reglas(repos: ReposDep, servicios: ServiciosDep) -> ReglasDeAgenda:
+    return ReglasDeAgenda(
+        repos.citas, repos.usuarios, repos.servicios, repos.disponibilidades, servicios.reloj
+    )
+
+
+def _actualizar(repos: ReposDep, servicios: ServiciosDep) -> ActualizarCita:
+    return ActualizarCita(repos.citas, repos.estados_cita, _reglas(repos, servicios))
+
+
+def _dueno_de_cita(repos: ReposDep, cita_id: int) -> int | None:
+    return _consulta(repos).obtener(cita_id).cliente_id
 
 
 def _servicios(repos: ReposDep) -> GestionarServicios:
@@ -178,6 +194,7 @@ def agenda_dia(veterinario_id: int, repos: ReposDep, dia: date = Query(...)) -> 
 @router.get("/citas", response_model=list[CitaOut], summary="Listar citas")
 def listar_citas(
     repos: ReposDep,
+    acceso: AccesoDep,
     mascota_id: int | None = None,
     veterinario_id: int | None = None,
     cliente_id: int | None = None,
@@ -185,13 +202,16 @@ def listar_citas(
     desde: datetime | None = None,
     hasta: datetime | None = None,
 ) -> list[CitaOut]:
+    cliente_id = acceso.filtro_propio(cliente_id)
     vistas = _consulta(repos).listar(mascota_id, veterinario_id, cliente_id, estado, desde, hasta)
     return [CitaOut.desde(v) for v in vistas]
 
 
 @router.get("/citas/{cita_id}", response_model=CitaOut, summary="Ver una cita")
-def obtener_cita(cita_id: int, repos: ReposDep) -> CitaOut:
-    return CitaOut.desde(_consulta(repos).obtener(cita_id))
+def obtener_cita(cita_id: int, repos: ReposDep, acceso: AccesoDep) -> CitaOut:
+    vista = _consulta(repos).obtener(cita_id)
+    acceso.propietario(vista.cliente_id)
+    return CitaOut.desde(vista)
 
 
 @router.post(
@@ -200,31 +220,41 @@ def obtener_cita(cita_id: int, repos: ReposDep) -> CitaOut:
     status_code=status.HTTP_201_CREATED,
     summary="Agendar una cita",
 )
-def crear_cita(datos: CitaIn, repos: ReposDep, servicios: ServiciosDep) -> CitaOut:
+def crear_cita(
+    datos: CitaIn, repos: ReposDep, servicios: ServiciosDep, acceso: AccesoDep
+) -> CitaOut:
+    mascotas = ConsultarMascotas(repos.mascotas, repos.especies, repos.usuarios)
+    acceso.propietario(mascotas.obtener(datos.mascota_id).mascota.cliente_id)
     caso = AgendarCita(
-        repos.citas,
-        repos.mascotas,
-        repos.usuarios,
-        repos.servicios,
-        repos.estados_cita,
-        repos.disponibilidades,
-        servicios.reloj,
+        repos.citas, repos.mascotas, repos.estados_cita, _reglas(repos, servicios)
     )
     cita = caso.ejecutar(datos.model_dump())
     return CitaOut.desde(_consulta(repos).obtener(cita.id))
 
 
 @router.put("/citas/{cita_id}", response_model=CitaOut, summary="Actualizar una cita")
-def actualizar_cita(cita_id: int, datos: CitaActualizarIn, repos: ReposDep) -> CitaOut:
-    caso = ActualizarCita(repos.citas, repos.estados_cita, repos.servicios)
-    caso.ejecutar(cita_id, datos.model_dump(exclude_unset=True))
+def actualizar_cita(
+    cita_id: int,
+    datos: CitaActualizarIn,
+    repos: ReposDep,
+    servicios: ServiciosDep,
+    acceso: AccesoDep,
+) -> CitaOut:
+    acceso.propietario(_dueno_de_cita(repos, cita_id))
+    _actualizar(repos, servicios).ejecutar(cita_id, datos.model_dump(exclude_unset=True))
     return CitaOut.desde(_consulta(repos).obtener(cita_id))
 
 
 @router.put("/citas/{cita_id}/estado", response_model=CitaOut, summary="Cambiar el estado")
-def cambiar_estado(cita_id: int, datos: CambioEstadoIn, repos: ReposDep) -> CitaOut:
-    caso = ActualizarCita(repos.citas, repos.estados_cita, repos.servicios)
-    caso.cambiar_estado(cita_id, datos.estado_id, datos.estado)
+def cambiar_estado(
+    cita_id: int,
+    datos: CambioEstadoIn,
+    repos: ReposDep,
+    servicios: ServiciosDep,
+    acceso: AccesoDep,
+) -> CitaOut:
+    acceso.propietario(_dueno_de_cita(repos, cita_id))
+    _actualizar(repos, servicios).cambiar_estado(cita_id, datos.estado_id, datos.estado)
     return CitaOut.desde(_consulta(repos).obtener(cita_id))
 
 
@@ -234,5 +264,5 @@ def cambiar_estado(cita_id: int, datos: CambioEstadoIn, repos: ReposDep) -> Cita
     summary="Eliminar una cita",
     dependencies=[SoloPersonal],
 )
-def eliminar_cita(cita_id: int, repos: ReposDep) -> None:
-    ActualizarCita(repos.citas, repos.estados_cita, repos.servicios).eliminar(cita_id)
+def eliminar_cita(cita_id: int, repos: ReposDep, servicios: ServiciosDep) -> None:
+    _actualizar(repos, servicios).eliminar(cita_id)

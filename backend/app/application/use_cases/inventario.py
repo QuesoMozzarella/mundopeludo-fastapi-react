@@ -5,6 +5,7 @@ from ...domain.errors import NotFoundError, ValidationError
 from ...domain.model.inventario import ImagenProducto, Producto
 from ...domain.ports.repositories import ImagenProductoRepository, ProductoRepository
 from ...domain.ports.services import Clock
+from ...domain.value_objects import TipoAnimal
 from ..read_models import ProductoVista
 
 MAX_BYTES_IMAGEN = 5 * 1024 * 1024
@@ -43,8 +44,12 @@ class ConsultarProductos:
         solo_activos: bool = True,
         solo_online: bool | None = None,
         stock_bajo: bool = False,
+        tipo_animal: str | None = None,
     ) -> list[ProductoVista]:
         encontrados = self.productos.listar(categoria, buscar, solo_activos, solo_online, stock_bajo)
+        if tipo_animal:
+            animal = TipoAnimal.desde(tipo_animal, campo="tipo_animal")
+            encontrados = [p for p in encontrados if p.sirve_para(animal)]
         return [self._componer(p) for p in encontrados]
 
     def obtener(self, producto_id: int) -> ProductoVista:

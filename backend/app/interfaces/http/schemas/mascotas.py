@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, BaseModel, Field
 
 from ....application.read_models import MascotaVista, SolicitudVista
 from ....domain.model.mascota import Especie
@@ -100,7 +100,9 @@ class SolicitudAdopcionIn(BaseModel):
 
 class RevisionIn(BaseModel):
     revisor_id: int
-    notas: str = ""
+    # `notas_revisor` es el nombre que usaba la API anterior y que el cliente
+    # SPA sigue enviando; sin el alias, Pydantic lo descartaba en silencio.
+    notas: str = Field(default="", validation_alias=AliasChoices("notas", "notas_revisor"))
 
 
 class CancelacionIn(BaseModel):

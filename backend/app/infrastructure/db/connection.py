@@ -58,8 +58,15 @@ class Database:
         try:
             yield conn
             conn.commit()
-        except Exception:
-            conn.rollback()
+        except BaseException as exc:
+            # BaseException y no Exception: una cancelación o un GeneratorExit
+            # también deben deshacer la transacción. Con ":memory:" la conexión
+            # no se cierra y el cambio a medias quedaría visible a la siguiente
+            # petición.
+            if getattr(exc, "conservar_cambios", False):
+                conn.commit()
+            else:
+                conn.rollback()
             raise
         finally:
             if self.ruta != ":memory:":

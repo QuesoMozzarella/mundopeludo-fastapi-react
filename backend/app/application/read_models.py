@@ -72,6 +72,7 @@ class CitaVista:
 class HistorialVista:
     historial: HistorialMedico
     mascota_id: int | None = None
+    cliente_id: int | None = None
     mascota_nombre: str = ""
     veterinario_nombre: str = ""
     fecha_cita: datetime | None = None

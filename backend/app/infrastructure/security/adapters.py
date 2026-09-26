@@ -67,7 +67,11 @@ class JwtTokenService(TokenService):
 
     def __init__(self, secreto: str, minutos_vigencia: int = 60 * 12):
         self.secreto = secreto.encode("utf-8")
-        self.minutos_vigencia = minutos_vigencia
+        self._minutos_vigencia = minutos_vigencia
+
+    @property
+    def minutos_vigencia(self) -> int:
+        return self._minutos_vigencia
 
     def emitir(self, sujeto: int, datos: dict | None = None) -> str:
         ahora = datetime.now(timezone.utc)

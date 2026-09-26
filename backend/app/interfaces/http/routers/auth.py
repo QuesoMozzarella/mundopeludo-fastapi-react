@@ -12,7 +12,8 @@ from ....application.use_cases.autenticacion import (
 )
 from ....application.use_cases.usuarios import ConsultarUsuarios
 from ....config import Config
-from ..deps import ConfigDep, ReposDep, ServiciosDep, UsuarioDep
+from ....domain.value_objects import TipoUsuario
+from ..deps import AccesoDep, ConfigDep, ReposDep, ServiciosDep, UsuarioDep
 from ..schemas.usuarios import (
     CambioPasswordIn,
     LoginIn,
@@ -52,7 +53,14 @@ def login(datos: LoginIn, repos: ReposDep, servicios: ServiciosDep) -> SesionOut
     status_code=status.HTTP_201_CREATED,
     summary="Registrar una cuenta nueva",
 )
-def registrar(datos: RegistroIn, repos: ReposDep, servicios: ServiciosDep) -> SesionOut:
+def registrar(
+    datos: RegistroIn, repos: ReposDep, servicios: ServiciosDep, acceso: AccesoDep
+) -> SesionOut:
+    # El registro público sólo da de alta clientes; las cuentas de personal
+    # (veterinario, administrador) las crea un administrador.
+    tipo = TipoUsuario.desde(datos.tipo, campo="tipo", por_defecto=TipoUsuario.CLIENTE)
+    if tipo is not TipoUsuario.CLIENTE:
+        acceso.solo_administrador()
     caso = RegistrarUsuario(
         repos.usuarios,
         repos.perfiles_cliente,
@@ -68,14 +76,14 @@ def registrar(datos: RegistroIn, repos: ReposDep, servicios: ServiciosDep) -> Se
         apellidos=datos.apellidos,
         telefono=datos.telefono,
         direccion=datos.direccion,
-        tipo=datos.tipo,
+        tipo=tipo,
         documento=datos.documento,
         especialidades_ids=datos.especialidades_ids,
     )
     token = servicios.tokens.emitir(usuario.id, {"email": usuario.email, "tipo": usuario.tipo.value})
     return SesionOut(
         access_token=token,
-        expira_en_minutos=getattr(servicios.tokens, "minutos_vigencia", 720),
+        expira_en_minutos=servicios.tokens.minutos_vigencia,
         usuario=_vista(repos, usuario.id),
     )
 

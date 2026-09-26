@@ -37,7 +37,9 @@ Migración del backend Django original a **FastAPI + sqlite3** siguiendo
 
 
 def create_app(configuracion: Config | None = None) -> FastAPI:
-    contenedor = Contenedor(configuracion or config_global)
+    configuracion = configuracion or config_global
+    configuracion.validar()
+    contenedor = Contenedor(configuracion)
     contenedor.preparar()
 
     app = FastAPI(

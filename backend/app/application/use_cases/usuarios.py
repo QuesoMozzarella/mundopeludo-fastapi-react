@@ -28,7 +28,10 @@ class ConsultarUsuarios:
         self.especialidades = especialidades
 
     def listar(
-        self, tipo: str | None = None, activos: bool | None = None, buscar: str | None = None
+        self,
+        tipo: TipoUsuario | str | None = None,
+        activos: bool | None = None,
+        buscar: str | None = None,
     ) -> list[UsuarioVista]:
         tipo_enum = TipoUsuario.desde(tipo, campo="tipo") if tipo else None
         return [self._componer(u) for u in self.usuarios.listar(tipo_enum, activos, buscar)]

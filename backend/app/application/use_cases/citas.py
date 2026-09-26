@@ -5,6 +5,7 @@ from datetime import date, datetime, timedelta
 
 from ...domain.errors import BusinessRuleError, ConflictError, NotFoundError, ValidationError
 from ...domain.model.cita import Cita, Disponibilidad, EstadoCita, Servicio
+from ...domain.model.usuario import Usuario
 from ...domain.ports.repositories import (
     CitaRepository,
     DisponibilidadRepository,
@@ -16,6 +17,7 @@ from ...domain.ports.repositories import (
     UsuarioRepository,
 )
 from ...domain.ports.services import Clock
+from ...domain.value_objects import hora_local
 from ..read_models import CitaVista, DisponibilidadVista, ServicioVista
 
 MINUTOS_ENTRE_CITAS = 30
@@ -228,6 +230,8 @@ class ConsultarCitas:
             if encontrado is None:
                 raise NotFoundError("Estado de cita", estado)
             estado_id = encontrado.id
+        desde = hora_local(desde) if desde else None
+        hasta = hora_local(hasta) if hasta else None
         citas = self.citas.listar(mascota_id, veterinario_id, cliente_id, estado_id, desde, hasta)
         return [self._componer(c) for c in citas]
 
@@ -257,6 +261,82 @@ class ConsultarCitas:
         )
 
 
+class ReglasDeAgenda:
+    """Reglas que una cita cumple al agendarse *y* al reprogramarse.
+
+    Viven aparte para que `AgendarCita` y `ActualizarCita` no puedan
+    divergir: antes, un PUT permitía mover una cita al pasado, encima de otra
+    o a un profesional que no era veterinario.
+    """
+
+    def __init__(
+        self,
+        citas: CitaRepository,
+        usuarios: UsuarioRepository,
+        servicios: ServicioRepository,
+        disponibilidades: DisponibilidadRepository,
+        reloj: Clock,
+    ):
+        self.citas = citas
+        self.usuarios = usuarios
+        self.servicios = servicios
+        self.disponibilidades = disponibilidades
+        self.reloj = reloj
+
+    def veterinario(self, veterinario_id: int) -> Usuario:
+        veterinario = self.usuarios.obtener(veterinario_id)
+        if veterinario is None:
+            raise NotFoundError("Usuario", veterinario_id)
+        if not veterinario.es_veterinario:
+            raise ValidationError("El profesional indicado no es veterinario", "veterinario_id")
+        return veterinario
+
+    def servicio(self, servicio_id: int, veterinario: Usuario) -> Servicio:
+        servicio = self.servicios.obtener(servicio_id)
+        if servicio is None:
+            raise NotFoundError("Servicio", servicio_id)
+        if not servicio.activo:
+            raise BusinessRuleError(f"El servicio '{servicio.nombre}' no está activo")
+        if not servicio.admite_veterinario(veterinario.id):
+            raise BusinessRuleError(
+                f"{veterinario.nombre_completo} no presta el servicio '{servicio.nombre}'"
+            )
+        return servicio
+
+    def horario(self, cita: Cita) -> None:
+        if cita.fecha_hora < self.reloj.ahora():
+            raise BusinessRuleError("No se puede agendar una cita en el pasado")
+
+        agenda = self.citas.listar_por_veterinario_y_dia(
+            cita.veterinario_id, cita.fecha_hora.date()
+        )
+        for existente in agenda:
+            if cita.se_solapa_con(existente, MINUTOS_ENTRE_CITAS):
+                raise ConflictError(
+                    f"El veterinario ya tiene una cita a las {existente.fecha_hora:%H:%M}"
+                )
+
+        franjas = self.disponibilidades.listar(cita.veterinario_id)
+        if franjas and not any(f.cubre(cita.fecha_hora) for f in franjas):
+            raise BusinessRuleError(
+                "El horario está fuera de la disponibilidad declarada del veterinario"
+            )
+
+
+def _resolver_estado(estados: EstadoCitaRepository, estado_id, nombre) -> EstadoCita:
+    if estado_id:
+        estado = estados.obtener(estado_id)
+        if estado is None:
+            raise NotFoundError("Estado de cita", estado_id)
+        return estado
+    if not nombre:
+        raise ValidationError("Indica 'estado' o 'estado_id'", "estado")
+    estado = estados.obtener_por_nombre(nombre)
+    if estado is None:
+        raise NotFoundError("Estado de cita", nombre)
+    return estado
+
+
 class AgendarCita:
     """Alta de cita con las reglas que en Django vivían en formularios y señales."""
 
@@ -264,42 +344,24 @@ class AgendarCita:
         self,
         citas: CitaRepository,
         mascotas: MascotaRepository,
-        usuarios: UsuarioRepository,
-        servicios: ServicioRepository,
         estados: EstadoCitaRepository,
-        disponibilidades: DisponibilidadRepository,
-        reloj: Clock,
+        reglas: ReglasDeAgenda,
     ):
         self.citas = citas
         self.mascotas = mascotas
-        self.usuarios = usuarios
-        self.servicios = servicios
         self.estados = estados
-        self.disponibilidades = disponibilidades
-        self.reloj = reloj
+        self.reglas = reglas
 
     def ejecutar(self, datos: dict) -> Cita:
         mascota = self.mascotas.obtener(datos.get("mascota_id"))
         if mascota is None:
             raise NotFoundError("Mascota", datos.get("mascota_id"))
 
-        veterinario = self.usuarios.obtener(datos.get("veterinario_id"))
-        if veterinario is None:
-            raise NotFoundError("Usuario", datos.get("veterinario_id"))
-        if not veterinario.es_veterinario:
-            raise ValidationError("El profesional indicado no es veterinario", "veterinario_id")
-
-        servicio = self.servicios.obtener(datos.get("servicio_id"))
-        if servicio is None:
-            raise NotFoundError("Servicio", datos.get("servicio_id"))
-        if not servicio.activo:
-            raise BusinessRuleError(f"El servicio '{servicio.nombre}' no está activo")
-        if not servicio.admite_veterinario(veterinario.id):
-            raise BusinessRuleError(
-                f"{veterinario.nombre_completo} no presta el servicio '{servicio.nombre}'"
-            )
-
-        estado = self._resolver_estado(datos.get("estado_id"), datos.get("estado"))
+        veterinario = self.reglas.veterinario(datos.get("veterinario_id"))
+        servicio = self.reglas.servicio(datos.get("servicio_id"), veterinario)
+        estado = _resolver_estado(
+            self.estados, datos.get("estado_id"), datos.get("estado") or "Pendiente"
+        )
 
         cita = Cita(
             mascota_id=mascota.id,
@@ -311,33 +373,8 @@ class AgendarCita:
             motivo=datos.get("motivo"),
             notas=datos.get("notas"),
         )
-        if cita.fecha_hora < self.reloj.ahora():
-            raise BusinessRuleError("No se puede agendar una cita en el pasado")
-
-        agenda = self.citas.listar_por_veterinario_y_dia(veterinario.id, cita.fecha_hora.date())
-        for existente in agenda:
-            if cita.se_solapa_con(existente, MINUTOS_ENTRE_CITAS):
-                raise ConflictError(
-                    f"El veterinario ya tiene una cita a las {existente.fecha_hora:%H:%M}"
-                )
-
-        franjas = self.disponibilidades.listar(veterinario.id)
-        if franjas and not any(f.cubre(cita.fecha_hora) for f in franjas):
-            raise BusinessRuleError(
-                "El horario está fuera de la disponibilidad declarada del veterinario"
-            )
+        self.reglas.horario(cita)
         return self.citas.crear(cita)
-
-    def _resolver_estado(self, estado_id, nombre) -> EstadoCita:
-        if estado_id:
-            estado = self.estados.obtener(estado_id)
-            if estado is None:
-                raise NotFoundError("Estado de cita", estado_id)
-            return estado
-        estado = self.estados.obtener_por_nombre(nombre or "Pendiente")
-        if estado is None:
-            raise NotFoundError("Estado de cita", nombre or "Pendiente")
-        return estado
 
 
 class ActualizarCita:
@@ -345,37 +382,47 @@ class ActualizarCita:
         self,
         citas: CitaRepository,
         estados: EstadoCitaRepository,
-        servicios: ServicioRepository,
+        reglas: ReglasDeAgenda,
     ):
         self.citas = citas
         self.estados = estados
-        self.servicios = servicios
+        self.reglas = reglas
 
     def ejecutar(self, cita_id: int, cambios: dict) -> Cita:
         actual = self._obtener(cita_id)
         estado_id = actual.estado_id
         if cambios.get("estado_id") or cambios.get("estado"):
-            estado_id = self._estado(cambios.get("estado_id"), cambios.get("estado")).id
-        servicio_id = cambios.get("servicio_id", actual.servicio_id)
-        if servicio_id != actual.servicio_id and self.servicios.obtener(servicio_id) is None:
-            raise NotFoundError("Servicio", servicio_id)
+            estado_id = _resolver_estado(
+                self.estados, cambios.get("estado_id"), cambios.get("estado")
+            ).id
 
         actualizada = Cita(
             id=actual.id,
             mascota_id=actual.mascota_id,
-            veterinario_id=cambios.get("veterinario_id", actual.veterinario_id),
+            veterinario_id=cambios.get("veterinario_id") or actual.veterinario_id,
             estado_id=estado_id,
-            servicio_id=servicio_id,
-            fecha_hora=cambios.get("fecha_hora", actual.fecha_hora),
+            servicio_id=cambios.get("servicio_id") or actual.servicio_id,
+            fecha_hora=cambios.get("fecha_hora") or actual.fecha_hora,
             peso=cambios.get("peso", actual.peso),
             motivo=cambios.get("motivo") or actual.motivo,
             notas=cambios.get("notas", actual.notas),
         )
+
+        # Sólo se revalida la agenda si cambia cuándo, con quién o qué: así
+        # se pueden seguir editando las notas de una cita ya pasada.
+        if (
+            actualizada.veterinario_id != actual.veterinario_id
+            or actualizada.servicio_id != actual.servicio_id
+            or actualizada.fecha_hora != actual.fecha_hora
+        ):
+            veterinario = self.reglas.veterinario(actualizada.veterinario_id)
+            self.reglas.servicio(actualizada.servicio_id, veterinario)
+            self.reglas.horario(actualizada)
         return self.citas.actualizar(actualizada)
 
     def cambiar_estado(self, cita_id: int, estado_id=None, estado: str | None = None) -> Cita:
         cita = self._obtener(cita_id)
-        cita.cambiar_estado(self._estado(estado_id, estado).id)
+        cita.cambiar_estado(_resolver_estado(self.estados, estado_id, estado).id)
         return self.citas.actualizar(cita)
 
     def eliminar(self, cita_id: int) -> None:
@@ -387,19 +434,6 @@ class ActualizarCita:
         if cita is None:
             raise NotFoundError("Cita", cita_id)
         return cita
-
-    def _estado(self, estado_id, nombre) -> EstadoCita:
-        if estado_id:
-            estado = self.estados.obtener(estado_id)
-            if estado is None:
-                raise NotFoundError("Estado de cita", estado_id)
-            return estado
-        if not nombre:
-            raise ValidationError("Indica 'estado' o 'estado_id'", "estado")
-        estado = self.estados.obtener_por_nombre(nombre)
-        if estado is None:
-            raise NotFoundError("Estado de cita", nombre)
-        return estado
 
 
 class ConsultarAgendaDia:

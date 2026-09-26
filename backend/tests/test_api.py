@@ -14,6 +14,7 @@ RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, RAIZ)
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+from app.application.use_cases.autenticacion import RegistrarUsuario  # noqa: E402
 from app.bootstrap import create_app  # noqa: E402
 from app.config import Config  # noqa: E402
 from cliente import crear_cliente  # noqa: E402
@@ -25,6 +26,35 @@ def nuevo_cliente():
     ruta = os.path.join(tempfile.mkdtemp(prefix="mundopeludo-test-"), "prueba.db")
     app = create_app(Config(ruta_bd=ruta, secreto_jwt="secreto-de-prueba", exigir_auth=False))
     return crear_cliente(app)
+
+
+def cliente_con_auth():
+    """App con `MP_REQUIRE_AUTH=1`; devuelve también la app para sembrar datos."""
+    ruta = os.path.join(tempfile.mkdtemp(prefix="mundopeludo-auth-"), "prueba.db")
+    app = create_app(Config(ruta_bd=ruta, secreto_jwt="secreto", exigir_auth=True))
+    return app, crear_cliente(app)
+
+
+def _crear_directo(app, email, tipo):
+    """Alta sin pasar por HTTP, como `seed.py`: con auth activa, el registro
+    público no permite crear personal."""
+    contenedor = app.state.contenedor
+    with contenedor.db.unidad_de_trabajo() as conexion:
+        repos = contenedor.repositorios(conexion)
+        usuario = RegistrarUsuario(
+            repos.usuarios,
+            repos.perfiles_cliente,
+            repos.perfiles_veterinario,
+            contenedor.servicios.hasher,
+            contenedor.servicios.reloj,
+        ).ejecutar(email=email, password=PASSWORD, nombre="Nombre", apellidos="Apellido", tipo=tipo)
+    return usuario.id
+
+
+def _token(cli, email):
+    r = cli.post("/api/auth/login", {"email": email, "password": PASSWORD})
+    assert r.status == 200, r
+    return {"Authorization": f"Bearer {r.json()['access_token']}"}
 
 
 def _crear(cli, email, tipo="cliente", **extra):
@@ -525,15 +555,8 @@ def test_checkout_es_transaccional():
 
 
 def test_autorizacion_por_rol():
-    ruta = os.path.join(tempfile.mkdtemp(prefix="mundopeludo-auth-"), "prueba.db")
-    app = create_app(Config(ruta_bd=ruta, secreto_jwt="secreto", exigir_auth=True))
-    cli = crear_cliente(app)
-
-    cli.post(
-        "/api/auth/register",
-        {"email": "admin@test.com", "password": PASSWORD, "nombre": "Ada", "apellidos": "Admin",
-         "tipo": "administrador"},
-    )
+    app, cli = cliente_con_auth()
+    _crear_directo(app, "admin@test.com", "administrador")
     cli.post(
         "/api/auth/register",
         {"email": "cliente@test.com", "password": PASSWORD, "nombre": "Ceci", "apellidos": "Cliente"},
@@ -606,6 +629,208 @@ def test_especialidades_y_perfil_veterinario():
         f"/api/users/{vet['id']}/perfil-veterinario", {"especialidades_ids": [999]}
     )
     assert inexistente.status == 404, inexistente
+
+
+# --------------------------------------------------------------------------
+# Regresiones de la auditoría de la API
+# --------------------------------------------------------------------------
+def test_recuperacion_resiste_fuerza_bruta():
+    cli = nuevo_cliente()
+    _crear(cli, "bruta@test.com")
+    real = cli.post("/api/auth/password/recuperar", {"email": "bruta@test.com"}).json()[
+        "codigo_debug"
+    ]
+    erroneos = [f"{(int(real) + i) % 1_000_000:06d}" for i in range(1, 6)]
+    for codigo in erroneos:
+        r = cli.post(
+            "/api/auth/password/restablecer",
+            {"email": "bruta@test.com", "codigo": codigo, "password_nueva": "otraClave123"},
+        )
+        assert r.status == 401, r
+
+    # Cada fallo quedó guardado pese al rollback: el código real ya no sirve.
+    bloqueado = cli.post(
+        "/api/auth/password/restablecer",
+        {"email": "bruta@test.com", "codigo": real, "password_nueva": "otraClave123"},
+    )
+    assert bloqueado.status == 401, bloqueado
+
+
+def test_autorizacion_por_propietario():
+    app, cli = cliente_con_auth()
+    _crear_directo(app, "jefa@test.com", "administrador")
+    vet_id = _crear_directo(app, "doc@test.com", "veterinario")
+    ana = _crear(cli, "ana@test.com")
+    beto = _crear(cli, "beto@test.com")
+    h_admin, h_vet = _token(cli, "jefa@test.com"), _token(cli, "doc@test.com")
+    h_ana, h_beto = _token(cli, "ana@test.com"), _token(cli, "beto@test.com")
+
+    # Registro: el público sólo crea clientes; el personal lo crea un admin.
+    datos_vet = {"email": "nuevo-vet@test.com", "password": PASSWORD, "nombre": "Vera",
+                 "apellidos": "Vet", "tipo": "veterinario"}
+    assert cli.post("/api/auth/register", datos_vet).status == 401
+    assert cli.post("/api/auth/register", datos_vet, headers=h_ana).status == 403
+    assert cli.post("/api/auth/register", datos_vet, headers=h_admin).status == 201
+
+    # Usuarios: cada uno edita lo suyo, y el rol sólo lo cambia un admin.
+    assert cli.put(f"/api/users/{ana['id']}", {"telefono": "555"}).status == 401
+    assert cli.put(f"/api/users/{ana['id']}", {"telefono": "555"}, headers=h_beto).status == 403
+    assert cli.put(f"/api/users/{ana['id']}", {"telefono": "555"}, headers=h_ana).status == 200
+    assert cli.put(f"/api/users/{ana['id']}", {"tipo": "administrador"}, headers=h_ana).status == 403
+    assert cli.get("/api/users", headers=h_ana).status == 403
+    assert cli.get("/api/users", headers=h_vet).status == 200
+    assert cli.get(f"/api/users/{beto['id']}", headers=h_ana).status == 403
+    assert cli.put(
+        f"/api/users/{vet_id}/perfil-veterinario", {"documento": "1"}, headers=h_ana
+    ).status == 403
+
+    # Carrito y pedidos: sólo el dueño (o el personal).
+    assert cli.get(f"/api/carrito/{beto['id']}", headers=h_ana).status == 403
+    assert cli.get(f"/api/carrito/{ana['id']}", headers=h_ana).status == 200
+    assert cli.get(f"/api/carrito/{ana['id']}", headers=h_vet).status == 200
+    assert cli.get("/api/pedidos", params={"usuario_id": beto["id"]}, headers=h_ana).status == 403
+    assert cli.get("/api/pedidos", headers=h_ana).status == 200
+    assert cli.post(
+        "/api/checkout", {"usuario_id": beto["id"], "items": []}, headers=h_ana
+    ).status == 403
+
+    # Mascotas: un cliente sólo registra y ve las suyas.
+    especie = cli.get("/api/especies").json()[0]
+    mascota = {"especie_id": especie["id"], "nombre": "Pelusa", "sexo": "Hembra", "color": "blanco"}
+    assert cli.post("/api/mascotas", {**mascota, "cliente_id": beto["id"]}, headers=h_ana).status == 403
+    propia = cli.post("/api/mascotas", {**mascota, "cliente_id": ana["id"]}, headers=h_ana)
+    assert propia.status == 201, propia
+    assert cli.get(f"/api/mascotas/{propia.json()['id']}", headers=h_beto).status == 403
+    assert cli.get("/api/mascotas", headers=h_beto).json() == []
+    assert cli.put(
+        f"/api/mascotas/{propia.json()['id']}", {"cliente_id": beto["id"]}, headers=h_ana
+    ).status == 403
+
+    # Datos clínicos y del panel: nada sin sesión.
+    for ruta in ("/api/historiales-medicos", "/api/citas", "/api/adopciones/solicitudes"):
+        assert cli.get(ruta).status == 401, ruta
+        assert cli.get(ruta, params={"cliente_id": beto["id"]}, headers=h_ana).status == 403, ruta
+    assert cli.get("/api/dashboard/stats", headers=h_ana).status == 403
+    assert cli.get("/api/dashboard/stats", headers=h_admin).status == 200
+    assert cli.get("/api/actividad", headers=h_ana).status == 403
+
+
+def _agenda_basica(cli):
+    vet = _crear(cli, "agenda-vet@test.com", "veterinario")
+    tutor = _crear(cli, "agenda-tutor@test.com")
+    especie = cli.get("/api/especies").json()[0]
+    mascota = cli.post(
+        "/api/mascotas",
+        {"cliente_id": tutor["id"], "especie_id": especie["id"], "nombre": "Kira",
+         "sexo": "Hembra", "color": "canela"},
+    ).json()
+    servicio = cli.post(
+        "/api/servicios",
+        {"nombre": "Vacunación", "descripcion": "Vacunas", "veterinarios_ids": [vet["id"]]},
+    ).json()
+    base = {"mascota_id": mascota["id"], "veterinario_id": vet["id"],
+            "servicio_id": servicio["id"], "motivo": "Vacuna anual"}
+    return vet, tutor, base
+
+
+def test_reprogramar_cita_respeta_la_agenda():
+    cli = nuevo_cliente()
+    _vet, tutor, base = _agenda_basica(cli)
+    manana = (datetime.now() + timedelta(days=1)).replace(hour=9, minute=0, second=0, microsecond=0)
+    primera = cli.post("/api/citas", {**base, "fecha_hora": manana.isoformat()}).json()
+    segunda = cli.post(
+        "/api/citas", {**base, "fecha_hora": (manana + timedelta(hours=2)).isoformat()}
+    ).json()
+    ruta = f"/api/citas/{segunda['id']}"
+
+    assert cli.put(ruta, {"fecha_hora": manana.isoformat()}).status == 409
+    pasado = (datetime.now() - timedelta(days=2)).isoformat()
+    assert cli.put(ruta, {"fecha_hora": pasado}).status == 409
+    assert cli.put(ruta, {"veterinario_id": tutor["id"]}).status == 422
+
+    # Cambiar sólo las notas no revalida la agenda y moverla a un hueco libre sí vale.
+    assert cli.put(ruta, {"notas": "Traer cartilla"}).status == 200
+    libre = (manana + timedelta(hours=4)).isoformat()
+    movida = cli.put(ruta, {"fecha_hora": libre})
+    assert movida.status == 200 and movida.json()["fecha_hora"].startswith(libre[:16]), movida
+    assert cli.get(f"/api/citas/{primera['id']}").json()["fecha_hora"].startswith(
+        manana.isoformat()[:16]
+    )
+
+
+def test_cita_con_zona_horaria():
+    cli = nuevo_cliente()
+    _vet, _tutor, base = _agenda_basica(cli)
+    local = (datetime.now() + timedelta(days=2)).replace(hour=11, minute=0, second=0, microsecond=0)
+    con_zona = local.astimezone().isoformat()  # p. ej. 2026-09-28T11:00:00-05:00
+    creada = cli.post("/api/citas", {**base, "fecha_hora": con_zona})
+    assert creada.status == 201, creada
+    assert creada.json()["fecha_hora"].startswith(local.isoformat()[:16]), creada.json()
+
+    utc = cli.post("/api/citas", {**base, "fecha_hora": "2099-01-01T15:00:00Z"})
+    assert utc.status == 201, utc
+
+
+def test_contrato_del_cliente_spa():
+    cli = nuevo_cliente()
+    vet = _crear(cli, "spa-vet@test.com", "veterinario")
+    tutor = _crear(cli, "spa-tutor@test.com")
+    especie = cli.get("/api/especies").json()[0]
+
+    # Las notas del revisor llegan como `notas_revisor`.
+    mascota = cli.post(
+        "/api/mascotas",
+        {"especie_id": especie["id"], "nombre": "Bruno", "sexo": "Macho", "color": "gris"},
+    ).json()
+    cli.put(f"/api/adopciones/mascotas/{mascota['id']}/publicar")
+    solicitud = cli.post(
+        "/api/adopciones/solicitudes", {"mascota_id": mascota["id"], "cliente_id": tutor["id"]}
+    ).json()
+    rechazada = cli.put(
+        f"/api/adopciones/solicitudes/{solicitud['id']}/rechazar",
+        {"revisor_id": vet["id"], "notas_revisor": "Falta visita domiciliaria"},
+    )
+    assert rechazada.json()["notas_revisor"] == "Falta visita domiciliaria", rechazada.json()
+
+    # Checkout con los items en el cuerpo: el carrito del SPA vive en el navegador.
+    pienso = cli.post(
+        "/api/productos",
+        {"nombre": "Pienso Gato", "categoria": "alimento", "precio": 20, "stock": 3,
+         "tipo_animal": "gato"},
+    ).json()
+    collar = cli.post(
+        "/api/productos",
+        {"nombre": "Collar Azul", "categoria": "accesorio", "precio": 8, "stock": 3,
+         "tipo_animal": "perro"},
+    ).json()
+    cli.post(f"/api/carrito/{tutor['id']}", {"producto_id": collar["id"], "cantidad": 1})
+    pedido = cli.post(
+        "/api/checkout",
+        {"usuario_id": tutor["id"], "metodo_pago": "tarjeta", "direccion": "Calle 2",
+         "items": [{"producto_id": pienso["id"], "cantidad": 2}]},
+    )
+    assert pedido.status == 201, pedido
+    assert pedido.json()["pedido_id"] == pedido.json()["id"]
+    assert pedido.json()["total"] == 40.0, pedido.json()
+    assert cli.get(f"/api/productos/{pienso['id']}").json()["stock"] == 1
+    # La compra directa no toca el carrito guardado.
+    assert cli.get(f"/api/carrito/{tutor['id']}").json()["total_items"] == 1
+
+    # Filtros de la API anterior: `search` y `tipo_animal`.
+    buscados = cli.get("/api/productos", params={"search": "collar"}).json()
+    assert [p["nombre"] for p in buscados] == ["Collar Azul"], buscados
+    para_gato = cli.get("/api/productos", params={"tipo_animal": "gato"}).json()
+    assert [p["nombre"] for p in para_gato] == ["Pienso Gato"], para_gato
+
+
+def test_produccion_exige_clave_propia():
+    try:
+        create_app(Config(ruta_bd=":memory:", entorno="produccion"))
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("arrancó en producción con la clave JWT de desarrollo")
+    create_app(Config(ruta_bd=":memory:", entorno="produccion", secreto_jwt="clave-propia"))
 
 
 def _ejecutar_todo() -> int:

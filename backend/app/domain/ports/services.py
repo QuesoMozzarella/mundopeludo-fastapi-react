@@ -25,6 +25,11 @@ class TokenService(ABC):
     def decodificar(self, token: str) -> dict:
         """Devuelve el payload o lanza `AuthenticationError`."""
 
+    @property
+    @abstractmethod
+    def minutos_vigencia(self) -> int:
+        """Minutos que dura un token recién emitido."""
+
 
 class Clock(ABC):
     """Reloj inyectable: hace que los casos de uso sean deterministas en tests."""

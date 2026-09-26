@@ -71,12 +71,12 @@ class SqliteCodigoRecuperacionRepository(RepositorioSQLite, CodigoRecuperacionRe
         )
         return codigo
 
-    def obtener_vigente(self, usuario_id: int, codigo: str) -> CodigoRecuperacion | None:
+    def obtener_activo(self, usuario_id: int) -> CodigoRecuperacion | None:
         fila = self._uno(
             """SELECT * FROM codigos_recuperacion
-               WHERE usuario_id=? AND codigo=? AND activo=1
-               ORDER BY fecha_creacion DESC LIMIT 1""",
-            (usuario_id, (codigo or "").strip()),
+               WHERE usuario_id=? AND activo=1
+               ORDER BY fecha_creacion DESC, id DESC LIMIT 1""",
+            (usuario_id,),
         )
         return self._mapear(fila) if fila else None
 

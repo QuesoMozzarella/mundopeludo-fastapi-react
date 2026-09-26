@@ -66,10 +66,10 @@ uvicorn backend.main:app --reload --port 8000
 | Variable | Por defecto | Para qué sirve |
 |---|---|---|
 | `MP_DB_PATH` | `backend/data/mundopeludo.db` | Ruta del archivo SQLite |
-| `MP_SECRET_KEY` | clave de desarrollo | Firma de los JWT |
+| `MP_SECRET_KEY` | clave de desarrollo | Firma de los JWT. **Obligatoria en producción**: la app no arranca con la de desarrollo |
 | `MP_TOKEN_MINUTES` | `720` | Vigencia del token |
 | `MP_CORS_ORIGINS` | `*` | Orígenes permitidos, separados por coma |
-| `MP_REQUIRE_AUTH` | `0` | `1` exige token y rol en escrituras |
+| `MP_REQUIRE_AUTH` | `0` | `1` exige token, rol y propiedad del recurso (ver *Autenticación*) |
 | `MP_ENV` | `desarrollo` | En producción oculta el código de recuperación |
 
 ---
@@ -129,13 +129,29 @@ Los **15 modelos** del proyecto original están cubiertos:
 * **Autenticación**: se sustituye la sesión con cookie + CSRF de Django por JWT
   `Bearer`. Con `MP_REQUIRE_AUTH=0` (valor por defecto) las escrituras siguen
   abiertas para no romper al cliente SPA existente, que todavía no envía la
-  cabecera `Authorization`; con `MP_REQUIRE_AUTH=1` se exigen token y rol.
+  cabecera `Authorization`. **Ese modo es abierto**: cualquiera puede leer y
+  modificar cualquier dato, así que sólo sirve para desarrollo local. Con
+  `MP_REQUIRE_AUTH=1` se exigen token y rol, y además:
+  * el registro público sólo crea clientes; las cuentas de veterinario y de
+    administrador las crea un administrador (o `seed.py`);
+  * un cliente sólo ve y modifica lo suyo: su usuario, carrito, pedidos,
+    mascotas, citas, historiales y solicitudes de adopción. En los listados se
+    le filtra automáticamente;
+  * cambiar el rol o dar de baja una cuenta, transferir una mascota o
+    publicarla en adopción, y consultar usuarios, bitácora o panel quedan
+    reservados al personal;
+  * quien aprueba o rechaza una adopción firma con su propio `revisor_id`.
 * **Imágenes de producto**: se suben en base64 dentro del JSON
   (`POST /api/productos/{id}/imagenes`) en vez de `multipart/form-data`, para no
   depender de `python-multipart`. Los bytes se guardan en la base, igual que el
   `BinaryField` original.
 * **Dinero**: el dominio usa `Decimal` con dos decimales; la serialización a
   número JSON ocurre sólo en el borde HTTP.
+* **Compatibilidad con el cliente SPA**: `POST /api/checkout` acepta `items`
+  en el cuerpo (el carrito del frontend vive en el navegador) y en ese caso no
+  toca el carrito guardado; la respuesta incluye `pedido_id`. La revisión de
+  adopciones acepta `notas_revisor` y `GET /api/productos` acepta `search` y
+  `tipo_animal`, como la API anterior.
 
 ---
 
@@ -146,6 +162,11 @@ handler termina bien se hace `COMMIT`, y si lanza una excepción, `ROLLBACK`.
 Por eso el checkout es atómico: si el tercer producto del carrito no tiene
 stock, tampoco se descuenta el de los dos primeros (hay una prueba que lo
 comprueba, `test_checkout_es_transaccional`).
+
+La excepción son los errores marcados con `conservar_cambios`
+(`IntentoFallidoError`): confirman lo escrito antes de fallar. Así un código de
+recuperación erróneo suma un intento aunque la petición se rechace, y tras 5
+fallos el código queda bloqueado.
 
 ## Errores
 
@@ -169,5 +190,7 @@ pytest backend/tests                 # si tienes pytest instalado
 Cubren el registro y login, la recuperación de contraseña, las validaciones de
 mascota, el flujo completo de adopción, la agenda con solapes y
 disponibilidad, la generación de SKU, el control de stock, la subida de
-imágenes, el carrito, la atomicidad del checkout, la autorización por rol y el
-panel de indicadores.
+imágenes, el carrito, la atomicidad del checkout, la autorización por rol y
+por propietario, el bloqueo del código de recuperación por fuerza bruta, la
+reprogramación de citas, las fechas con zona horaria, el contrato con el
+cliente SPA y el panel de indicadores.

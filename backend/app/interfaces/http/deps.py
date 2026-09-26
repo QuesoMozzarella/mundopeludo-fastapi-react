@@ -16,7 +16,28 @@ from ...application.use_cases.autenticacion import ObtenerUsuarioDesdeToken
 from ...config import Config, config as config_global
 from ...domain.errors import AuthenticationError, AuthorizationError
 from ...domain.model.usuario import Usuario
+from ...domain.ports.repositories import (
+    ActividadSistemaRepository,
+    CarritoRepository,
+    CitaRepository,
+    CodigoRecuperacionRepository,
+    DisponibilidadRepository,
+    EspecialidadRepository,
+    EspecieRepository,
+    EstadoCitaRepository,
+    HistorialMedicoRepository,
+    ImagenProductoRepository,
+    MascotaRepository,
+    PedidoRepository,
+    PerfilClienteRepository,
+    PerfilVeterinarioRepository,
+    ProductoRepository,
+    ServicioRepository,
+    SolicitudAdopcionRepository,
+    UsuarioRepository,
+)
 from ...domain.ports.services import Clock, GeneradorCodigos, PasswordHasher, TokenService
+from ...domain.value_objects import TipoUsuario
 from ...infrastructure.db.connection import Database
 from ...infrastructure.repositories.citas import (
     SqliteCitaRepository,
@@ -66,26 +87,30 @@ class Servicios:
 
 @dataclass
 class Repositorios:
-    """Todos los repositorios de una petición, sobre la misma conexión."""
+    """Todos los repositorios de una petición, sobre la misma conexión.
 
-    usuarios: SqliteUsuarioRepository
-    perfiles_cliente: SqlitePerfilClienteRepository
-    perfiles_veterinario: SqlitePerfilVeterinarioRepository
-    especialidades: SqliteEspecialidadRepository
-    especies: SqliteEspecieRepository
-    mascotas: SqliteMascotaRepository
-    solicitudes: SqliteSolicitudAdopcionRepository
-    estados_cita: SqliteEstadoCitaRepository
-    servicios: SqliteServicioRepository
-    disponibilidades: SqliteDisponibilidadRepository
-    citas: SqliteCitaRepository
-    historiales: SqliteHistorialMedicoRepository
-    productos: SqliteProductoRepository
-    imagenes: SqliteImagenProductoRepository
-    carritos: SqliteCarritoRepository
-    pedidos: SqlitePedidoRepository
-    actividades: SqliteActividadSistemaRepository
-    codigos: SqliteCodigoRecuperacionRepository
+    Los campos se declaran con los puertos del dominio, no con las clases
+    SQLite: quien consume `Repositorios` sólo conoce los contratos.
+    """
+
+    usuarios: UsuarioRepository
+    perfiles_cliente: PerfilClienteRepository
+    perfiles_veterinario: PerfilVeterinarioRepository
+    especialidades: EspecialidadRepository
+    especies: EspecieRepository
+    mascotas: MascotaRepository
+    solicitudes: SolicitudAdopcionRepository
+    estados_cita: EstadoCitaRepository
+    servicios: ServicioRepository
+    disponibilidades: DisponibilidadRepository
+    citas: CitaRepository
+    historiales: HistorialMedicoRepository
+    productos: ProductoRepository
+    imagenes: ImagenProductoRepository
+    carritos: CarritoRepository
+    pedidos: PedidoRepository
+    actividades: ActividadSistemaRepository
+    codigos: CodigoRecuperacionRepository
 
 
 class Contenedor:
@@ -183,7 +208,7 @@ def usuario_actual(usuario: UsuarioOpcionalDep) -> Usuario:
 UsuarioDep = Annotated[Usuario, Depends(usuario_actual)]
 
 
-def exigir_roles(*roles: str):
+def exigir_roles(*roles: TipoUsuario):
     """Dependencia de autorización por rol.
 
     Si `MP_REQUIRE_AUTH=0` (valor por defecto en desarrollo) no bloquea: deja
@@ -195,15 +220,76 @@ def exigir_roles(*roles: str):
             return usuario
         if usuario is None:
             raise AuthenticationError("Se requiere iniciar sesión")
-        if roles and usuario.tipo.value not in roles:
+        if roles and usuario.tipo not in roles:
+            requeridos = ", ".join(rol.value for rol in roles)
             raise AuthorizationError(
-                "Tu rol no tiene permiso para esta operación (requiere: " + ", ".join(roles) + ")"
+                f"Tu rol no tiene permiso para esta operación (requiere: {requeridos})"
             )
         return usuario
 
     return verificar
 
 
-SoloPersonal = Depends(exigir_roles("administrador", "veterinario"))
-SoloAdmin = Depends(exigir_roles("administrador"))
+PERSONAL = (TipoUsuario.ADMINISTRADOR, TipoUsuario.VETERINARIO)
+
+SoloPersonal = Depends(exigir_roles(*PERSONAL))
+SoloAdmin = Depends(exigir_roles(TipoUsuario.ADMINISTRADOR))
 Autenticado = Depends(exigir_roles())
+
+
+@dataclass
+class Acceso:
+    """Autorización a nivel de recurso: quién pide y de quién es lo que pide.
+
+    `exigir_roles` sólo mira el rol; esto además comprueba la propiedad
+    (el carrito, las citas o las mascotas de *otro* cliente). Igual que
+    `exigir_roles`, no restringe nada cuando `MP_REQUIRE_AUTH=0`.
+    """
+
+    usuario: Usuario | None
+    exigir: bool
+
+    @property
+    def es_personal(self) -> bool:
+        return self.usuario is not None and self.usuario.tipo in PERSONAL
+
+    def propietario(self, dueno_id: int | None, *, personal: bool = True) -> None:
+        """Deja pasar al dueño del recurso, al administrador y, si `personal`, al veterinario."""
+        if not self.exigir:
+            return
+        usuario = self._sesion()
+        if usuario.es_administrador or (personal and self.es_personal):
+            return
+        if dueno_id is None or usuario.id != dueno_id:
+            raise AuthorizationError("No tienes permiso sobre datos de otro usuario")
+
+    def solo_personal(self) -> None:
+        if self.exigir:
+            self._sesion()
+            if not self.es_personal:
+                raise AuthorizationError("Operación reservada al personal de la clínica")
+
+    def solo_administrador(self) -> None:
+        if self.exigir and not self._sesion().es_administrador:
+            raise AuthorizationError("Operación reservada a administradores")
+
+    def filtro_propio(self, dueno_id: int | None) -> int | None:
+        """Para listados: el personal consulta lo que pida; un cliente, sólo lo suyo."""
+        if not self.exigir or self.es_personal:
+            return dueno_id
+        usuario = self._sesion()
+        if dueno_id is not None and dueno_id != usuario.id:
+            raise AuthorizationError("No tienes permiso sobre datos de otro usuario")
+        return usuario.id
+
+    def _sesion(self) -> Usuario:
+        if self.usuario is None:
+            raise AuthenticationError("Se requiere iniciar sesión")
+        return self.usuario
+
+
+def obtener_acceso(usuario: UsuarioOpcionalDep, configuracion: ConfigDep) -> Acceso:
+    return Acceso(usuario=usuario, exigir=configuracion.exigir_auth)
+
+
+AccesoDep = Annotated[Acceso, Depends(obtener_acceso)]

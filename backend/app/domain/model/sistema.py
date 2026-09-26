@@ -4,6 +4,7 @@ Modelos Django originales: ActividadSistema, CodigoRecuperacion.
 """
 from __future__ import annotations
 
+import hmac
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
@@ -62,6 +63,10 @@ class CodigoRecuperacion:
 
     def es_utilizable(self, ahora: datetime) -> bool:
         return self.activo and not self.esta_expirado(ahora) and self.intentos < MAX_INTENTOS_CODIGO
+
+    def coincide(self, codigo: str) -> bool:
+        """Comparación en tiempo constante: no filtra cuántos dígitos acertó."""
+        return hmac.compare_digest(self.codigo, (codigo or "").strip())
 
     def incrementar_intento(self) -> None:
         self.intentos += 1

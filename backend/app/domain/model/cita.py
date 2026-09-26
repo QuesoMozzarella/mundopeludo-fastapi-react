@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, time
 
 from ..errors import ValidationError
-from ..value_objects import DiaSemana
+from ..value_objects import DiaSemana, hora_local
 
 
 @dataclass
@@ -162,10 +162,10 @@ class Cita:
 
 def _fecha_hora(valor) -> datetime:
     if isinstance(valor, datetime):
-        return valor.replace(microsecond=0)
+        return hora_local(valor).replace(microsecond=0)
     texto = str(valor or "").strip().replace("Z", "+00:00")
     try:
-        return datetime.fromisoformat(texto).replace(microsecond=0)
+        return hora_local(datetime.fromisoformat(texto)).replace(microsecond=0)
     except ValueError:
         raise ValidationError(
             "fecha_hora debe ser una fecha ISO 8601 (YYYY-MM-DDTHH:MM)", "fecha_hora"

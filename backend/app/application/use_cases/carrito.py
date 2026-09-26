@@ -128,12 +128,19 @@ class ProcesarCheckout:
         usuario_id: int,
         metodo_pago: str = "efectivo",
         direccion: str | None = None,
+        items: list[tuple[int, int]] | None = None,
     ) -> Pedido:
+        """Con `items` (producto_id, cantidad) compra esos productos sin tocar
+        el carrito guardado; sin ellos, compra el carrito del usuario."""
         usuario = self.usuarios.obtener(usuario_id)
         if usuario is None:
             raise NotFoundError("Usuario", usuario_id)
 
-        carrito = self.carritos.obtener_por_usuario(usuario_id)
+        compra_directa = items is not None
+        if compra_directa:
+            carrito = self._carrito_temporal(usuario_id, items)
+        else:
+            carrito = self.carritos.obtener_por_usuario(usuario_id)
         if carrito is None or not carrito.items:
             raise ValidationError("El carrito está vacío", "carrito")
 
@@ -147,6 +154,9 @@ class ProcesarCheckout:
             producto = self.productos.obtener(item.producto_id)
             if producto is None:
                 raise NotFoundError("Producto", item.producto_id)
+            # Puede haberse retirado de la tienda después de meterlo al carrito.
+            if not producto.activo or not producto.disponible_online:
+                raise BusinessRuleError(f"'{producto.nombre}' no está disponible en la tienda")
             producto.descontar_stock(item.cantidad)
             self.productos.actualizar(producto)
             pedido.items.append(
@@ -161,8 +171,9 @@ class ProcesarCheckout:
         pedido.recalcular_total()
         pedido = self.pedidos.crear(pedido)
 
-        carrito.vaciar()
-        self.carritos.guardar(carrito)
+        if not compra_directa:
+            carrito.vaciar()
+            self.carritos.guardar(carrito)
 
         if self.actividades:
             self.actividades.registrar(
@@ -174,6 +185,17 @@ class ProcesarCheckout:
                 )
             )
         return pedido
+
+
+    def _carrito_temporal(self, usuario_id: int, items: list[tuple[int, int]]) -> Carrito:
+        """Carrito en memoria (no se persiste) con el precio vigente de cada producto."""
+        carrito = Carrito(usuario_id=usuario_id)
+        for producto_id, cantidad in items:
+            producto = self.productos.obtener(producto_id)
+            if producto is None:
+                raise NotFoundError("Producto", producto_id)
+            carrito.agregar_producto(producto, cantidad)
+        return carrito
 
 
 class ConsultarPedidos:

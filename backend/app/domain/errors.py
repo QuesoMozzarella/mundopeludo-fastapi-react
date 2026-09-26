@@ -6,7 +6,15 @@ El núcleo no conoce HTTP: lanza estas excepciones y el adaptador primario
 
 
 class DomainError(Exception):
-    """Raíz de todos los errores del dominio."""
+    """Raíz de todos los errores del dominio.
+
+    `conservar_cambios=True` indica a la unidad de trabajo que confirme lo
+    escrito antes del error en lugar de deshacerlo. Sirve para registrar un
+    intento fallido (p. ej. un código de recuperación erróneo) aunque la
+    operación termine rechazada.
+    """
+
+    conservar_cambios: bool = False
 
     def __init__(self, mensaje: str):
         super().__init__(mensaje)
@@ -43,6 +51,12 @@ class BusinessRuleError(DomainError):
 
 class AuthenticationError(DomainError):
     """Credenciales inválidas o token expirado."""
+
+
+class IntentoFallidoError(AuthenticationError):
+    """Credencial incorrecta cuyo intento debe quedar registrado."""
+
+    conservar_cambios = True
 
 
 class AuthorizationError(DomainError):

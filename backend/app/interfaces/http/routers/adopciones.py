@@ -11,7 +11,7 @@ from ....application.use_cases.adopciones import (
     SolicitarAdopcion,
 )
 from ....application.use_cases.mascotas import ConsultarMascotas
-from ..deps import ReposDep, ServiciosDep, SoloPersonal
+from ..deps import AccesoDep, ReposDep, ServiciosDep, SoloPersonal
 from ..schemas.mascotas import (
     CancelacionIn,
     MascotaOut,
@@ -62,10 +62,12 @@ def retirar(mascota_id: int, repos: ReposDep) -> MascotaOut:
 )
 def listar_solicitudes(
     repos: ReposDep,
+    acceso: AccesoDep,
     cliente_id: int | None = None,
     mascota_id: int | None = None,
     estado: str | None = None,
 ) -> list[SolicitudAdopcionOut]:
+    cliente_id = acceso.filtro_propio(cliente_id)
     return [
         SolicitudAdopcionOut.desde(v)
         for v in _consulta(repos).listar(cliente_id, mascota_id, estado)
@@ -77,8 +79,12 @@ def listar_solicitudes(
     response_model=SolicitudAdopcionOut,
     summary="Ver una solicitud",
 )
-def obtener_solicitud(solicitud_id: int, repos: ReposDep) -> SolicitudAdopcionOut:
-    return SolicitudAdopcionOut.desde(_consulta(repos).obtener(solicitud_id))
+def obtener_solicitud(
+    solicitud_id: int, repos: ReposDep, acceso: AccesoDep
+) -> SolicitudAdopcionOut:
+    vista = _consulta(repos).obtener(solicitud_id)
+    acceso.propietario(vista.solicitud.cliente_id)
+    return SolicitudAdopcionOut.desde(vista)
 
 
 @router.post(
@@ -88,8 +94,9 @@ def obtener_solicitud(solicitud_id: int, repos: ReposDep) -> SolicitudAdopcionOu
     summary="Postular a una adopción",
 )
 def crear_solicitud(
-    datos: SolicitudAdopcionIn, repos: ReposDep, servicios: ServiciosDep
+    datos: SolicitudAdopcionIn, repos: ReposDep, servicios: ServiciosDep, acceso: AccesoDep
 ) -> SolicitudAdopcionOut:
+    acceso.propietario(datos.cliente_id)
     caso = SolicitarAdopcion(
         repos.solicitudes, repos.mascotas, repos.usuarios, servicios.reloj, repos.actividades
     )
@@ -104,8 +111,14 @@ def crear_solicitud(
     dependencies=[SoloPersonal],
 )
 def aprobar(
-    solicitud_id: int, datos: RevisionIn, repos: ReposDep, servicios: ServiciosDep
+    solicitud_id: int,
+    datos: RevisionIn,
+    repos: ReposDep,
+    servicios: ServiciosDep,
+    acceso: AccesoDep,
 ) -> SolicitudAdopcionOut:
+    # El revisor es quien firma: nadie revisa en nombre de otro veterinario.
+    acceso.propietario(datos.revisor_id, personal=False)
     caso = ResolverSolicitudAdopcion(
         repos.solicitudes, repos.mascotas, repos.usuarios, servicios.reloj, repos.actividades
     )
@@ -120,8 +133,13 @@ def aprobar(
     dependencies=[SoloPersonal],
 )
 def rechazar(
-    solicitud_id: int, datos: RevisionIn, repos: ReposDep, servicios: ServiciosDep
+    solicitud_id: int,
+    datos: RevisionIn,
+    repos: ReposDep,
+    servicios: ServiciosDep,
+    acceso: AccesoDep,
 ) -> SolicitudAdopcionOut:
+    acceso.propietario(datos.revisor_id, personal=False)
     caso = ResolverSolicitudAdopcion(
         repos.solicitudes, repos.mascotas, repos.usuarios, servicios.reloj, repos.actividades
     )
@@ -135,8 +153,13 @@ def rechazar(
     summary="Cancelar la propia solicitud",
 )
 def cancelar(
-    solicitud_id: int, datos: CancelacionIn, repos: ReposDep, servicios: ServiciosDep
+    solicitud_id: int,
+    datos: CancelacionIn,
+    repos: ReposDep,
+    servicios: ServiciosDep,
+    acceso: AccesoDep,
 ) -> SolicitudAdopcionOut:
+    acceso.propietario(datos.cliente_id)
     caso = CancelarSolicitudAdopcion(repos.solicitudes, repos.mascotas, servicios.reloj)
     caso.ejecutar(solicitud_id, datos.cliente_id)
     return SolicitudAdopcionOut.desde(_consulta(repos).obtener(solicitud_id))

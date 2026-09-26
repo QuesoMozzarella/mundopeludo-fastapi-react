@@ -4,7 +4,8 @@ Reemplazan los `*_CHOICES` de los modelos Django originales.
 """
 from __future__ import annotations
 
-from decimal import Decimal, ROUND_HALF_UP
+from datetime import datetime
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from enum import Enum
 
 from .errors import ValidationError
@@ -156,17 +157,28 @@ def etiqueta(valor) -> str:
     return ETIQUETAS.get(valor, getattr(valor, "value", str(valor)))
 
 
+def hora_local(momento: datetime) -> datetime:
+    """Pasa una fecha con zona horaria a la hora local del servidor, sin zona.
+
+    La agenda y el reloj (`RelojSistema`) trabajan con hora local ingenua; si
+    entra un "...Z" o un "-05:00" sin convertir, compararlo con `ahora()`
+    lanza `TypeError`.
+    """
+    if momento.tzinfo is not None:
+        return momento.astimezone().replace(tzinfo=None)
+    return momento
+
+
 def dinero(valor, *, campo: str = "precio") -> Decimal:
     """Normaliza cualquier entrada numérica a un Decimal de 2 decimales."""
-    if isinstance(valor, Decimal):
-        base = valor
-    elif valor is None:
-        base = Decimal("0")
-    else:
-        try:
-            base = Decimal(str(valor))
-        except Exception:
-            raise ValidationError(f"'{campo}' no es un valor monetario válido", campo) from None
-    if base.is_nan() or base.is_infinite():
-        raise ValidationError(f"'{campo}' no es un valor monetario válido", campo)
-    return base.quantize(CENTAVOS, rounding=ROUND_HALF_UP)
+    invalido = ValidationError(f"'{campo}' no es un valor monetario válido", campo)
+    if valor is None:
+        return Decimal("0").quantize(CENTAVOS)
+    try:
+        base = valor if isinstance(valor, Decimal) else Decimal(str(valor))
+        if base.is_nan() or base.is_infinite():
+            raise invalido
+        # `quantize` también falla con exponentes fuera de rango (p. ej. 1e999999999).
+        return base.quantize(CENTAVOS, rounding=ROUND_HALF_UP)
+    except InvalidOperation:
+        raise invalido from None

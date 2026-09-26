@@ -13,7 +13,7 @@ from decimal import Decimal
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from app.application.use_cases.autenticacion import RegistrarUsuario  # noqa: E402
-from app.application.use_cases.citas import AgendarCita  # noqa: E402
+from app.application.use_cases.citas import AgendarCita, ReglasDeAgenda  # noqa: E402
 from app.application.use_cases.historiales import RegistrarHistorial  # noqa: E402
 from app.application.use_cases.inventario import CrearProducto, GeneradorSku  # noqa: E402
 from app.application.use_cases.mascotas import RegistrarMascota  # noqa: E402
@@ -177,15 +177,14 @@ def poblar() -> None:
         )
 
         # 5. Una cita con su historial
-        agendar = AgendarCita(
+        reglas = ReglasDeAgenda(
             repos.citas,
-            repos.mascotas,
             repos.usuarios,
             repos.servicios,
-            repos.estados_cita,
             repos.disponibilidades,
             servicios_tec.reloj,
         )
+        agendar = AgendarCita(repos.citas, repos.mascotas, repos.estados_cita, reglas)
         cita = agendar.ejecutar(
             {
                 "mascota_id": luna.id,

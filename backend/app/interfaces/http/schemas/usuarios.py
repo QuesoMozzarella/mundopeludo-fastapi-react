@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from ....application.read_models import UsuarioVista
 from ....domain.model.usuario import Especialidad, PerfilCliente, PerfilVeterinario
+from ....domain.value_objects import TipoUsuario
 
 
 class LoginIn(BaseModel):
@@ -25,7 +26,7 @@ class RegistroIn(BaseModel):
     apellidos: str = Field(min_length=2, max_length=100)
     telefono: str | None = None
     direccion: str | None = None
-    tipo: str = "cliente"
+    tipo: str = TipoUsuario.CLIENTE.value
     documento: str | None = None
     especialidades_ids: list[int] = Field(default_factory=list)
 

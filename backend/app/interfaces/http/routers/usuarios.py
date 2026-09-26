@@ -11,7 +11,8 @@ from ....application.use_cases.usuarios import (
     GestionarPerfilCliente,
     GestionarPerfilVeterinario,
 )
-from ..deps import ReposDep, ServiciosDep, SoloAdmin, SoloPersonal
+from ....domain.value_objects import TipoUsuario
+from ..deps import AccesoDep, ReposDep, ServiciosDep, SoloAdmin, SoloPersonal
 from ..schemas.usuarios import (
     EspecialidadActualizarIn,
     EspecialidadIn,
@@ -33,7 +34,12 @@ def _consulta(repos: ReposDep) -> ConsultarUsuarios:
     )
 
 
-@router.get("/users", response_model=list[UsuarioOut], summary="Listar usuarios")
+@router.get(
+    "/users",
+    response_model=list[UsuarioOut],
+    summary="Listar usuarios",
+    dependencies=[SoloPersonal],
+)
 def listar_usuarios(
     repos: ReposDep,
     tipo: str | None = None,
@@ -45,27 +51,42 @@ def listar_usuarios(
 
 @router.get("/veterinarios", response_model=list[UsuarioOut], summary="Listar veterinarios")
 def listar_veterinarios(repos: ReposDep) -> list[UsuarioOut]:
-    return [UsuarioOut.desde(v) for v in _consulta(repos).listar("veterinario", True)]
+    return [UsuarioOut.desde(v) for v in _consulta(repos).listar(TipoUsuario.VETERINARIO, True)]
 
 
-@router.get("/clientes", response_model=list[UsuarioOut], summary="Listar clientes")
+@router.get(
+    "/clientes",
+    response_model=list[UsuarioOut],
+    summary="Listar clientes",
+    dependencies=[SoloPersonal],
+)
 def listar_clientes(repos: ReposDep) -> list[UsuarioOut]:
-    return [UsuarioOut.desde(v) for v in _consulta(repos).listar("cliente", True)]
+    return [UsuarioOut.desde(v) for v in _consulta(repos).listar(TipoUsuario.CLIENTE, True)]
 
 
 @router.get("/users/{usuario_id}", response_model=UsuarioOut, summary="Ver un usuario")
-def obtener_usuario(usuario_id: int, repos: ReposDep) -> UsuarioOut:
+def obtener_usuario(usuario_id: int, repos: ReposDep, acceso: AccesoDep) -> UsuarioOut:
+    acceso.propietario(usuario_id)
     return UsuarioOut.desde(_consulta(repos).obtener(usuario_id))
 
 
 @router.put("/users/{usuario_id}", response_model=UsuarioOut, summary="Actualizar un usuario")
 def actualizar_usuario(
-    usuario_id: int, datos: UsuarioActualizarIn, repos: ReposDep, servicios: ServiciosDep
+    usuario_id: int,
+    datos: UsuarioActualizarIn,
+    repos: ReposDep,
+    servicios: ServiciosDep,
+    acceso: AccesoDep,
 ) -> UsuarioOut:
+    acceso.propietario(usuario_id)
+    cambios = datos.model_dump(exclude_unset=True)
+    if {"tipo", "is_active"} & cambios.keys():
+        # Cambiar el rol o dar de baja una cuenta no es autoservicio.
+        acceso.solo_administrador()
     caso = ActualizarUsuario(
         repos.usuarios, repos.perfiles_cliente, repos.perfiles_veterinario, servicios.reloj
     )
-    caso.ejecutar(usuario_id, datos.model_dump(exclude_unset=True))
+    caso.ejecutar(usuario_id, cambios)
     return UsuarioOut.desde(_consulta(repos).obtener(usuario_id))
 
 
@@ -86,8 +107,13 @@ def desactivar_usuario(usuario_id: int, repos: ReposDep) -> UsuarioOut:
     summary="Actualizar el perfil de cliente",
 )
 def guardar_perfil_cliente(
-    usuario_id: int, datos: PerfilClienteIn, repos: ReposDep, servicios: ServiciosDep
+    usuario_id: int,
+    datos: PerfilClienteIn,
+    repos: ReposDep,
+    servicios: ServiciosDep,
+    acceso: AccesoDep,
 ) -> PerfilClienteOut:
+    acceso.propietario(usuario_id)
     caso = GestionarPerfilCliente(repos.usuarios, repos.perfiles_cliente, servicios.reloj)
     return PerfilClienteOut.desde(caso.guardar(usuario_id, datos.documento))
 
@@ -99,8 +125,14 @@ def guardar_perfil_cliente(
     dependencies=[SoloPersonal],
 )
 def guardar_perfil_veterinario(
-    usuario_id: int, datos: PerfilVeterinarioIn, repos: ReposDep, servicios: ServiciosDep
+    usuario_id: int,
+    datos: PerfilVeterinarioIn,
+    repos: ReposDep,
+    servicios: ServiciosDep,
+    acceso: AccesoDep,
 ) -> PerfilVeterinarioOut:
+    # Un veterinario edita su propio perfil; el de otro, sólo un administrador.
+    acceso.propietario(usuario_id, personal=False)
     caso = GestionarPerfilVeterinario(
         repos.usuarios, repos.perfiles_veterinario, repos.especialidades, servicios.reloj
     )
