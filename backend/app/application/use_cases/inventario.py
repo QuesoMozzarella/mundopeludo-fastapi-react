@@ -34,9 +34,12 @@ class GeneradorSku:
 
 
 class ConsultarProductos:
-    def __init__(self, productos: ProductoRepository, imagenes: ImagenProductoRepository):
+    def __init__(
+        self, productos: ProductoRepository, imagenes: ImagenProductoRepository, reloj: Clock
+    ):
         self.productos = productos
         self.imagenes = imagenes
+        self.reloj = reloj
 
     def listar(
         self,
@@ -60,9 +63,12 @@ class ConsultarProductos:
         return self._componer(producto)
 
     def _componer(self, producto: Producto) -> ProductoVista:
+        hoy = self.reloj.hoy()
         return ProductoVista(
             producto=producto,
             imagenes_ids=[i.id for i in self.imagenes.listar_por_producto(producto.id)],
+            proximo_a_vencer=producto.proximo_a_vencer(hoy),
+            vencido=producto.vencido(hoy),
         )
 
 
@@ -99,9 +105,10 @@ class CrearProducto:
 
 
 class ActualizarProducto:
-    def __init__(self, productos: ProductoRepository, sku: GeneradorSku):
+    def __init__(self, productos: ProductoRepository, sku: GeneradorSku, reloj: Clock):
         self.productos = productos
         self.sku = sku
+        self.reloj = reloj
 
     def ejecutar(self, producto_id: int, cambios: dict) -> Producto:
         actual = self.productos.obtener(producto_id)
@@ -129,6 +136,7 @@ class ActualizarProducto:
             palabras_clave=cambios.get("palabras_clave", actual.palabras_clave),
             activo=valor(cambios, "activo", actual.activo),
             fecha_creacion=actual.fecha_creacion,
+            fecha_actualizacion=self.reloj.ahora(),
         )
         # El SKU deriva de nombre + categoría: sólo se recalcula si cambian.
         if actualizado.nombre != actual.nombre or actualizado.categoria is not actual.categoria:
@@ -137,8 +145,9 @@ class ActualizarProducto:
 
 
 class AjustarStock:
-    def __init__(self, productos: ProductoRepository):
+    def __init__(self, productos: ProductoRepository, reloj: Clock):
         self.productos = productos
+        self.reloj = reloj
 
     def ejecutar(self, producto_id: int, cantidad: int, motivo: str = "ajuste") -> Producto:
         producto = self.productos.obtener(producto_id)
@@ -147,21 +156,22 @@ class AjustarStock:
         if cantidad == 0:
             raise ValidationError("La cantidad del ajuste no puede ser cero", "cantidad")
         if cantidad > 0:
-            producto.reponer_stock(cantidad)
+            producto.reponer_stock(cantidad, self.reloj.ahora())
         else:
-            producto.descontar_stock(abs(cantidad))
+            producto.descontar_stock(abs(cantidad), self.reloj.ahora())
         return self.productos.actualizar(producto)
 
 
 class DesactivarProducto:
-    def __init__(self, productos: ProductoRepository):
+    def __init__(self, productos: ProductoRepository, reloj: Clock):
         self.productos = productos
+        self.reloj = reloj
 
     def ejecutar(self, producto_id: int) -> Producto:
         producto = self.productos.obtener(producto_id)
         if producto is None:
             raise NotFoundError("Producto", producto_id)
-        producto.desactivar()
+        producto.desactivar(self.reloj.ahora())
         return self.productos.actualizar(producto)
 
 

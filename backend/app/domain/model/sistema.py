@@ -21,7 +21,7 @@ class ActividadSistema:
     usuario: str
     tipo: str
     descripcion: str
-    fecha: datetime = field(default_factory=datetime.now)
+    fecha: datetime = field(kw_only=True)
     id: int | None = None
 
     def __post_init__(self) -> None:
@@ -42,7 +42,7 @@ class CodigoRecuperacion:
 
     usuario_id: int
     codigo: str
-    fecha_creacion: datetime = field(default_factory=datetime.now)
+    fecha_creacion: datetime = field(kw_only=True)
     fecha_expiracion: datetime | None = None
     intentos: int = 0
     activo: bool = True

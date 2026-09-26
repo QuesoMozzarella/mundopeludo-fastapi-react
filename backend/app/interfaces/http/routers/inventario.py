@@ -29,8 +29,8 @@ from ..schemas.inventario import (
 router = APIRouter(prefix="/api", tags=["inventario"])
 
 
-def _consulta(repos: ReposDep) -> ConsultarProductos:
-    return ConsultarProductos(repos.productos, repos.imagenes)
+def _consulta(repos: ReposDep, servicios: ServiciosDep) -> ConsultarProductos:
+    return ConsultarProductos(repos.productos, repos.imagenes, servicios.reloj)
 
 
 def _imagenes(repos: ReposDep, servicios: ServiciosDep) -> GestionarImagenesProducto:
@@ -40,6 +40,7 @@ def _imagenes(repos: ReposDep, servicios: ServiciosDep) -> GestionarImagenesProd
 @router.get("/productos", response_model=list[ProductoOut], summary="Listar productos")
 def listar_productos(
     repos: ReposDep,
+    servicios: ServiciosDep,
     categoria: str | None = None,
     buscar: str | None = Query(default=None, description="Nombre, marca, SKU o palabras clave"),
     solo_activos: bool = True,
@@ -48,15 +49,15 @@ def listar_productos(
     tipo_animal: str | None = None,
     search: str | None = Query(default=None, include_in_schema=False),
 ) -> list[ProductoOut]:
-    vistas = _consulta(repos).listar(
+    vistas = _consulta(repos, servicios).listar(
         categoria, buscar or search, solo_activos, solo_online, stock_bajo, tipo_animal
     )
     return [ProductoOut.desde(v) for v in vistas]
 
 
 @router.get("/productos/{producto_id}", response_model=ProductoOut, summary="Ver un producto")
-def obtener_producto(producto_id: int, repos: ReposDep) -> ProductoOut:
-    return ProductoOut.desde(_consulta(repos).obtener(producto_id))
+def obtener_producto(producto_id: int, repos: ReposDep, servicios: ServiciosDep) -> ProductoOut:
+    return ProductoOut.desde(_consulta(repos, servicios).obtener(producto_id))
 
 
 @router.post(
@@ -69,7 +70,7 @@ def obtener_producto(producto_id: int, repos: ReposDep) -> ProductoOut:
 def crear_producto(datos: ProductoIn, repos: ReposDep, servicios: ServiciosDep) -> ProductoOut:
     caso = CrearProducto(repos.productos, GeneradorSku(repos.productos), servicios.reloj)
     producto = caso.ejecutar(datos.model_dump())
-    return ProductoOut.desde(_consulta(repos).obtener(producto.id))
+    return ProductoOut.desde(_consulta(repos, servicios).obtener(producto.id))
 
 
 @router.put(
@@ -79,11 +80,11 @@ def crear_producto(datos: ProductoIn, repos: ReposDep, servicios: ServiciosDep) 
     dependencies=[SoloPersonal],
 )
 def actualizar_producto(
-    producto_id: int, datos: ProductoActualizarIn, repos: ReposDep
+    producto_id: int, datos: ProductoActualizarIn, repos: ReposDep, servicios: ServiciosDep
 ) -> ProductoOut:
-    caso = ActualizarProducto(repos.productos, GeneradorSku(repos.productos))
+    caso = ActualizarProducto(repos.productos, GeneradorSku(repos.productos), servicios.reloj)
     caso.ejecutar(producto_id, datos.model_dump(exclude_unset=True))
-    return ProductoOut.desde(_consulta(repos).obtener(producto_id))
+    return ProductoOut.desde(_consulta(repos, servicios).obtener(producto_id))
 
 
 @router.post(
@@ -92,9 +93,11 @@ def actualizar_producto(
     summary="Ajustar el stock (+ repone, - descuenta)",
     dependencies=[SoloPersonal],
 )
-def ajustar_stock(producto_id: int, datos: AjusteStockIn, repos: ReposDep) -> ProductoOut:
-    AjustarStock(repos.productos).ejecutar(producto_id, datos.cantidad, datos.motivo)
-    return ProductoOut.desde(_consulta(repos).obtener(producto_id))
+def ajustar_stock(
+    producto_id: int, datos: AjusteStockIn, repos: ReposDep, servicios: ServiciosDep
+) -> ProductoOut:
+    AjustarStock(repos.productos, servicios.reloj).ejecutar(producto_id, datos.cantidad, datos.motivo)
+    return ProductoOut.desde(_consulta(repos, servicios).obtener(producto_id))
 
 
 @router.delete(
@@ -103,9 +106,9 @@ def ajustar_stock(producto_id: int, datos: AjusteStockIn, repos: ReposDep) -> Pr
     summary="Desactivar un producto (baja lógica)",
     dependencies=[SoloPersonal],
 )
-def desactivar_producto(producto_id: int, repos: ReposDep) -> ProductoOut:
-    DesactivarProducto(repos.productos).ejecutar(producto_id)
-    return ProductoOut.desde(_consulta(repos).obtener(producto_id))
+def desactivar_producto(producto_id: int, repos: ReposDep, servicios: ServiciosDep) -> ProductoOut:
+    DesactivarProducto(repos.productos, servicios.reloj).ejecutar(producto_id)
+    return ProductoOut.desde(_consulta(repos, servicios).obtener(producto_id))
 
 
 # ------------------------------ imágenes ------------------------------

@@ -29,7 +29,7 @@ class HistorialMedico:
     tratamiento: str
     cita_id: int | None = None
     observaciones: str | None = None
-    fecha_creacion: datetime = field(default_factory=datetime.now)
+    fecha_creacion: datetime = field(kw_only=True)
     id: int | None = None
 
     def __post_init__(self) -> None:

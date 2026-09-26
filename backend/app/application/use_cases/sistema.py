@@ -78,7 +78,7 @@ class ObtenerEstadisticas:
             citas_totales=self.citas.contar(),
             total_productos=len(catalogo),
             productos_stock_bajo=sum(1 for p in catalogo if p.stock_bajo),
-            productos_por_vencer=sum(1 for p in catalogo if p.proximo_a_vencer),
+            productos_por_vencer=sum(1 for p in catalogo if p.proximo_a_vencer(self.reloj.hoy())),
             historiales_registrados=len(self.historiales.listar()),
             ingresos_totales=self.pedidos.total_ingresos(),
         )

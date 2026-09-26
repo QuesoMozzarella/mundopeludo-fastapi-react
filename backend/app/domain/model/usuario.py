@@ -47,7 +47,7 @@ class Usuario:
     is_active: bool = True
     is_staff: bool = False
     is_superuser: bool = False
-    date_joined: datetime = field(default_factory=datetime.now)
+    date_joined: datetime = field(kw_only=True)
     last_login: datetime | None = None
     intentos_fallidos: int = 0
     bloqueado_hasta: datetime | None = None
@@ -119,7 +119,7 @@ class PerfilCliente:
 
     usuario_id: int
     documento: str | None = None
-    fecha_actualizacion: datetime = field(default_factory=datetime.now)
+    fecha_actualizacion: datetime = field(kw_only=True)
     id: int | None = None
 
     def __post_init__(self) -> None:
@@ -149,7 +149,7 @@ class PerfilVeterinario:
     """`PerfilVeterinario` (1–1 con usuario) + M2M con `Especialidad`."""
 
     usuario_id: int
-    fecha_contratacion: date = field(default_factory=date.today)
+    fecha_contratacion: date = field(kw_only=True)
     documento: str | None = None
     activo: bool = False
     especialidades_ids: list[int] = field(default_factory=list)
@@ -159,11 +159,17 @@ class PerfilVeterinario:
         self.documento = _texto(self.documento, campo="documento", maximo=10, obligatorio=False)
         if isinstance(self.fecha_contratacion, datetime):
             self.fecha_contratacion = self.fecha_contratacion.date()
-        if self.fecha_contratacion > date.today():
+        self.especialidades_ids = sorted({int(i) for i in self.especialidades_ids})
+
+    def fijar_contratacion(self, fecha: date, hoy: date) -> None:
+        """No se valida en `__post_init__`: al leer de la base, "hoy" es otro día."""
+        if isinstance(fecha, datetime):
+            fecha = fecha.date()
+        if fecha > hoy:
             raise ValidationError(
                 "La fecha de contratación no puede ser futura", "fecha_contratacion"
             )
-        self.especialidades_ids = sorted({int(i) for i in self.especialidades_ids})
+        self.fecha_contratacion = fecha
 
     def asignar_especialidades(self, ids: list[int]) -> None:
         self.especialidades_ids = sorted({int(i) for i in ids})

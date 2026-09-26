@@ -984,8 +984,10 @@ def test_correo_smtp_arma_el_mensaje():
             "smtp.gmail.com", 587, "sistema@test.com", "clave",
             "MundoPeludo <sistema@test.com>",
         ).codigo_recuperacion(
-            Usuario(email="ana@test.com", nombre="Ana", apellidos="Pérez"),
-            CodigoRecuperacion(usuario_id=1, codigo="123456"),
+            Usuario(email="ana@test.com", nombre="Ana", apellidos="Pérez",
+                    date_joined=datetime(2030, 1, 1)),
+            CodigoRecuperacion(usuario_id=1, codigo="123456",
+                               fecha_creacion=datetime(2030, 1, 1)),
         )
     finally:
         smtplib.SMTP = original
@@ -1204,6 +1206,34 @@ def test_restablecer_password_desbloquea_la_cuenta():
     assert cli.post(
         "/api/auth/login", {"email": "olvidadiza@test.com", "password": "claveNueva123"}
     ).status == 200
+
+
+def test_el_dominio_usa_el_reloj_inyectado():
+    """Vencimientos y fechas salen del puerto Clock, no del reloj del sistema."""
+    ruta = os.path.join(tempfile.mkdtemp(prefix="mundopeludo-reloj-"), "prueba.db")
+    app = create_app(Config(ruta_bd=ruta, secreto_jwt="s", exigir_auth=False, correo_host=""))
+    reloj = _RelojFijo(datetime(2030, 6, 15, 9, 30))
+    app.state.contenedor.servicios.reloj = reloj
+    cli = crear_cliente(app)
+
+    base = {"categoria": "medicamento", "precio": 10, "stock": 5}
+    vencido = cli.post(
+        "/api/productos", {**base, "nombre": "Jarabe Viejo", "fecha_vencimiento": "2030-06-01"}
+    ).json()
+    por_vencer = cli.post(
+        "/api/productos", {**base, "nombre": "Jarabe Casi", "fecha_vencimiento": "2030-06-30"}
+    ).json()
+    vigente = cli.post(
+        "/api/productos", {**base, "nombre": "Jarabe Nuevo", "fecha_vencimiento": "2031-01-01"}
+    ).json()
+    assert vencido["vencido"] is True and vencido["proximo_a_vencer"] is True, vencido
+    assert por_vencer["vencido"] is False and por_vencer["proximo_a_vencer"] is True
+    assert vigente["vencido"] is False and vigente["proximo_a_vencer"] is False
+    assert vencido["fecha_creacion"].startswith("2030-06-15T09:30"), vencido["fecha_creacion"]
+
+    # El mismo producto, un año antes, ya no está vencido.
+    reloj.momento = datetime(2029, 6, 15)
+    assert cli.get(f"/api/productos/{vencido['id']}").json()["vencido"] is False
 
 
 def _ejecutar_todo() -> int:

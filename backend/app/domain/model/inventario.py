@@ -69,8 +69,8 @@ class Producto:
     disponible_online: bool = True
     palabras_clave: str | None = None
     activo: bool = True
-    fecha_creacion: datetime = field(default_factory=datetime.now)
-    fecha_actualizacion: datetime = field(default_factory=datetime.now)
+    fecha_creacion: datetime = field(kw_only=True)
+    fecha_actualizacion: datetime = field(kw_only=True)
     id: int | None = None
 
     def __post_init__(self) -> None:
@@ -132,17 +132,16 @@ class Producto:
     def stock_bajo(self) -> bool:
         return self.stock <= self.stock_minimo
 
-    @property
-    def proximo_a_vencer(self) -> bool:
+    # `hoy` llega de fuera (el puerto Clock): el dominio no lee el reloj.
+    def proximo_a_vencer(self, hoy: date) -> bool:
         if not self.fecha_vencimiento:
             return False
-        return self.fecha_vencimiento <= date.today() + timedelta(days=DIAS_PARA_VENCER)
+        return self.fecha_vencimiento <= hoy + timedelta(days=DIAS_PARA_VENCER)
 
-    @property
-    def vencido(self) -> bool:
+    def vencido(self, hoy: date) -> bool:
         if not self.fecha_vencimiento:
             return False
-        return self.fecha_vencimiento < date.today()
+        return self.fecha_vencimiento < hoy
 
     # --- comportamiento ---
     def sirve_para(self, animal: TipoAnimal) -> bool:
@@ -158,7 +157,7 @@ class Producto:
         codigo = "".join(p[:3] for p in palabras[:2]) or "GEN"
         return f"{prefijo}-{codigo}"
 
-    def descontar_stock(self, cantidad: int) -> None:
+    def descontar_stock(self, cantidad: int, ahora: datetime) -> None:
         cantidad = _entero(cantidad, "cantidad", minimo=1)
         if cantidad > self.stock:
             raise BusinessRuleError(
@@ -166,16 +165,16 @@ class Producto:
             )
         self.stock -= cantidad
         self.total_vendidos += cantidad
-        self.fecha_actualizacion = datetime.now()
+        self.fecha_actualizacion = ahora
 
-    def reponer_stock(self, cantidad: int) -> None:
+    def reponer_stock(self, cantidad: int, ahora: datetime) -> None:
         self.stock += _entero(cantidad, "cantidad", minimo=1)
-        self.fecha_actualizacion = datetime.now()
+        self.fecha_actualizacion = ahora
 
-    def desactivar(self) -> None:
+    def desactivar(self, ahora: datetime) -> None:
         self.activo = False
         self.disponible_online = False
-        self.fecha_actualizacion = datetime.now()
+        self.fecha_actualizacion = ahora
 
 
 @dataclass
@@ -186,7 +185,7 @@ class ImagenProducto:
     imagen_data: bytes | None = None
     nombre_archivo: str | None = None
     tipo_contenido: str = "image/jpeg"
-    fecha_subida: datetime = field(default_factory=datetime.now)
+    fecha_subida: datetime = field(kw_only=True)
     id: int | None = None
 
     def __post_init__(self) -> None:
@@ -210,7 +209,7 @@ class CarritoItem:
     cantidad: int = 1
     precio_unitario: Decimal = Decimal("0.00")
     carrito_id: int | None = None
-    fecha_agregado: datetime = field(default_factory=datetime.now)
+    fecha_agregado: datetime = field(kw_only=True)
     id: int | None = None
 
     def __post_init__(self) -> None:
@@ -228,8 +227,8 @@ class Carrito:
 
     usuario_id: int
     items: list[CarritoItem] = field(default_factory=list)
-    fecha_creacion: datetime = field(default_factory=datetime.now)
-    fecha_actualizacion: datetime = field(default_factory=datetime.now)
+    fecha_creacion: datetime = field(kw_only=True)
+    fecha_actualizacion: datetime = field(kw_only=True)
     id: int | None = None
 
     @property
@@ -247,7 +246,7 @@ class Carrito:
     def buscar_item(self, producto_id: int) -> CarritoItem | None:
         return next((i for i in self.items if i.producto_id == producto_id), None)
 
-    def agregar_producto(self, producto: Producto, cantidad: int = 1) -> CarritoItem:
+    def agregar_producto(self, producto: Producto, cantidad: int, ahora: datetime) -> CarritoItem:
         """Agrega o acumula, refrescando el precio como hacía Django."""
         cantidad = _entero(cantidad, "cantidad", minimo=1)
         item = self.buscar_item(producto.id)
@@ -257,15 +256,16 @@ class Carrito:
                 cantidad=cantidad,
                 precio_unitario=producto.precio_final,
                 carrito_id=self.id,
+                fecha_agregado=ahora,
             )
             self.items.append(item)
         else:
             item.cantidad += cantidad
             item.precio_unitario = producto.precio_final
-        self.fecha_actualizacion = datetime.now()
+        self.fecha_actualizacion = ahora
         return item
 
-    def actualizar_cantidad(self, producto_id: int, cantidad: int) -> bool:
+    def actualizar_cantidad(self, producto_id: int, cantidad: int, ahora: datetime) -> bool:
         item = self.buscar_item(producto_id)
         if item is None:
             return False
@@ -273,20 +273,20 @@ class Carrito:
             self.items.remove(item)
         else:
             item.cantidad = _entero(cantidad, "cantidad", minimo=1)
-        self.fecha_actualizacion = datetime.now()
+        self.fecha_actualizacion = ahora
         return True
 
-    def eliminar_producto(self, producto_id: int) -> bool:
+    def eliminar_producto(self, producto_id: int, ahora: datetime) -> bool:
         item = self.buscar_item(producto_id)
         if item is None:
             return False
         self.items.remove(item)
-        self.fecha_actualizacion = datetime.now()
+        self.fecha_actualizacion = ahora
         return True
 
-    def vaciar(self) -> None:
+    def vaciar(self, ahora: datetime) -> None:
         self.items.clear()
-        self.fecha_actualizacion = datetime.now()
+        self.fecha_actualizacion = ahora
 
 
 @dataclass
@@ -318,7 +318,7 @@ class Pedido:
     metodo_pago: str = "efectivo"
     direccion: str | None = None
     estado: str = "Completado"
-    fecha: datetime = field(default_factory=datetime.now)
+    fecha: datetime = field(kw_only=True)
     items: list[PedidoItem] = field(default_factory=list)
     id: int | None = None
 

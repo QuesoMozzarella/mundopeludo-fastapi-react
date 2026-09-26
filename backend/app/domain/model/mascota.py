@@ -41,7 +41,7 @@ class Mascota:
     peso: float = 0.0
     esta_esterilizado: bool = False
     activo: bool = True
-    fecha_registro: date = field(default_factory=date.today)
+    fecha_registro: date = field(kw_only=True)
     estado_adopcion: EstadoAdopcion = EstadoAdopcion.NORMAL
     id: int | None = None
 
@@ -126,8 +126,8 @@ class SolicitudAdopcion:
     mascota_id: int
     cliente_id: int
     estado: EstadoSolicitud = EstadoSolicitud.PENDIENTE
-    fecha_solicitud: datetime = field(default_factory=datetime.now)
-    fecha_actualizacion: datetime = field(default_factory=datetime.now)
+    fecha_solicitud: datetime = field(kw_only=True)
+    fecha_actualizacion: datetime = field(kw_only=True)
     revisado_por_id: int | None = None
     fecha_revision: datetime | None = None
     notas_revisor: str = ""

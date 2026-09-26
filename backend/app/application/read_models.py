@@ -101,6 +101,9 @@ class CarritoVista:
 class ProductoVista:
     producto: Producto
     imagenes_ids: list[int] = field(default_factory=list)
+    # Dependen de la fecha de hoy, que decide el caso de uso con su reloj.
+    proximo_a_vencer: bool = False
+    vencido: bool = False
 
 
 @dataclass

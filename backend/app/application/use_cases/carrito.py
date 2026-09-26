@@ -46,7 +46,7 @@ class GestionarCarrito:
                 f"Stock insuficiente para {producto.nombre}: quedan {producto.stock} unidades"
             )
 
-        carrito.agregar_producto(producto, cantidad)
+        carrito.agregar_producto(producto, cantidad, self.reloj.ahora())
         return self._componer(self.carritos.guardar(carrito))
 
     def actualizar_cantidad(self, usuario_id: int, producto_id: int, cantidad: int) -> CarritoVista:
@@ -58,19 +58,19 @@ class GestionarCarrito:
             raise BusinessRuleError(
                 f"Stock insuficiente para {producto.nombre}: quedan {producto.stock} unidades"
             )
-        if not carrito.actualizar_cantidad(producto_id, cantidad):
+        if not carrito.actualizar_cantidad(producto_id, cantidad, self.reloj.ahora()):
             raise NotFoundError("Item del carrito", producto_id)
         return self._componer(self.carritos.guardar(carrito))
 
     def quitar(self, usuario_id: int, producto_id: int) -> CarritoVista:
         carrito = self._carrito(usuario_id)
-        if not carrito.eliminar_producto(producto_id):
+        if not carrito.eliminar_producto(producto_id, self.reloj.ahora()):
             raise NotFoundError("Item del carrito", producto_id)
         return self._componer(self.carritos.guardar(carrito))
 
     def vaciar(self, usuario_id: int) -> CarritoVista:
         carrito = self._carrito(usuario_id)
-        carrito.vaciar()
+        carrito.vaciar(self.reloj.ahora())
         return self._componer(self.carritos.guardar(carrito))
 
     def _carrito(self, usuario_id: int) -> Carrito:
@@ -157,7 +157,7 @@ class ProcesarCheckout:
             # Puede haberse retirado de la tienda después de meterlo al carrito.
             if not producto.activo or not producto.disponible_online:
                 raise BusinessRuleError(f"'{producto.nombre}' no está disponible en la tienda")
-            producto.descontar_stock(item.cantidad)
+            producto.descontar_stock(item.cantidad, pedido.fecha)
             self.productos.actualizar(producto)
             pedido.items.append(
                 PedidoItem(
@@ -172,7 +172,7 @@ class ProcesarCheckout:
         pedido = self.pedidos.crear(pedido)
 
         if not compra_directa:
-            carrito.vaciar()
+            carrito.vaciar(pedido.fecha)
             self.carritos.guardar(carrito)
 
         if self.actividades:
@@ -186,15 +186,15 @@ class ProcesarCheckout:
             )
         return pedido
 
-
     def _carrito_temporal(self, usuario_id: int, items: list[tuple[int, int]]) -> Carrito:
         """Carrito en memoria (no se persiste) con el precio vigente de cada producto."""
-        carrito = Carrito(usuario_id=usuario_id)
+        ahora = self.reloj.ahora()
+        carrito = Carrito(usuario_id=usuario_id, fecha_creacion=ahora, fecha_actualizacion=ahora)
         for producto_id, cantidad in items:
             producto = self.productos.obtener(producto_id)
             if producto is None:
                 raise NotFoundError("Producto", producto_id)
-            carrito.agregar_producto(producto, cantidad)
+            carrito.agregar_producto(producto, cantidad, ahora)
         return carrito
 
 

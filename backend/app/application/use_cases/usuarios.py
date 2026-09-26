@@ -106,7 +106,7 @@ class ActualizarUsuario:
         if documento is not None:
             if actualizado.es_cliente:
                 perfil = self.perfiles_cliente.obtener_por_usuario(usuario.id) or PerfilCliente(
-                    usuario_id=usuario.id
+                    usuario_id=usuario.id, fecha_actualizacion=self.reloj.ahora()
                 )
                 perfil.documento = documento
                 perfil.fecha_actualizacion = self.reloj.ahora()
@@ -169,7 +169,7 @@ class GestionarPerfilVeterinario:
         if activo is not None:
             perfil.activo = bool(activo)
         if fecha_contratacion is not None:
-            perfil.fecha_contratacion = fecha_contratacion
+            perfil.fijar_contratacion(fecha_contratacion, self.reloj.hoy())
         if especialidades_ids is not None:
             conocidas = {e.id for e in self.especialidades.listar()}
             desconocidas = [i for i in especialidades_ids if i not in conocidas]
@@ -191,7 +191,9 @@ class GestionarPerfilCliente:
         usuario = self.usuarios.obtener(usuario_id)
         if usuario is None:
             raise NotFoundError("Usuario", usuario_id)
-        perfil = self.perfiles.obtener_por_usuario(usuario_id) or PerfilCliente(usuario_id=usuario_id)
+        perfil = self.perfiles.obtener_por_usuario(usuario_id) or PerfilCliente(
+            usuario_id=usuario_id, fecha_actualizacion=self.reloj.ahora()
+        )
         perfil.documento = documento
         perfil.fecha_actualizacion = self.reloj.ahora()
         return self.perfiles.guardar(perfil)
