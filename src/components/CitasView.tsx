@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Cita, Mascota, Servicio, User } from '../types';
+import { formatearFechaHora } from '../formato';
 import { 
   Calendar, 
   Clock, 
@@ -232,9 +233,9 @@ export const CitasView: React.FC<CitasViewProps> = ({
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="font-semibold text-slate-500">Fecha y Hora:</span>
-                    <span className="font-mono font-bold text-slate-900 flex items-center gap-1">
+                    <span className="font-bold text-slate-900 flex items-center gap-1">
                       <Clock className="w-3 h-3 text-slate-400" />
-                      {cita.fecha_hora}
+                      {formatearFechaHora(cita.fecha_hora)}
                     </span>
                   </div>
                   <div className="flex items-start justify-between pt-1 border-t border-slate-200">

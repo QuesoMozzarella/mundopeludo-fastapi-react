@@ -1,5 +1,6 @@
 import React from 'react';
 import { DashboardStats, User, Cita, Mascota } from '../types';
+import { formatearFechaHora } from '../formato';
 import { 
   Users, 
   Calendar, 
@@ -132,7 +133,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 </div>
 
                 <div className="text-right">
-                  <div className="font-bold font-mono text-slate-800">{c.fecha_hora}</div>
+                  <div className="font-bold text-slate-800">{formatearFechaHora(c.fecha_hora)}</div>
                   <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold mt-0.5 ${
                     c.estado === 'Confirmada' ? 'bg-emerald-100 text-emerald-800' :
                     c.estado === 'Pendiente' ? 'bg-amber-100 text-amber-800' :

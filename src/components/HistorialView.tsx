@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { HistorialMedico, Mascota, User, Cita } from '../types';
+import { formatearFechaHora } from '../formato';
 import { 
   ClipboardList, 
   Plus, 
@@ -186,7 +187,7 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
 
                 <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500 bg-slate-50 px-3 py-1.5 rounded-lg self-start sm:self-auto">
                   <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                  <span>{h.fecha_creacion}</span>
+                  <span>{formatearFechaHora(h.fecha_creacion)}</span>
                 </div>
               </div>
 

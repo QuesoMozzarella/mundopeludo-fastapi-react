@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Mascota, SolicitudAdopcion, User } from '../types';
+import { formatearFecha } from '../formato';
 import { 
   Heart, 
   CheckCircle, 
@@ -228,7 +229,7 @@ export const AdopcionesView: React.FC<AdopcionesViewProps> = ({
                       <span>Tel: {sol.cliente_telefono || 'No indicado'}</span>
                       <span className="flex items-center gap-1">
                         <Clock className="w-3.5 h-3.5 text-slate-400" />
-                        {sol.fecha_solicitud}
+                        {formatearFecha(sol.fecha_solicitud)}
                       </span>
                     </div>
 
