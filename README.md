@@ -110,8 +110,34 @@ tabla SQLite y las diferencias deliberadas, está en
 ```bash
 python backend/crear_superusuario.py  # primer administrador (la API arranca cerrada)
 python backend/seed.py                # datos de ejemplo, sólo desarrollo
-python backend/tests/test_api.py      # pruebas end-to-end, sin dependencias extra
+python backend/tests/test_api.py      # pruebas de la API, sin dependencias extra
 ```
+
+---
+
+## 🧪 Pruebas
+
+| Qué | Cómo | Qué cubre |
+|---|---|---|
+| API (backend) | `python backend/tests/test_api.py` | Casos de uso, permisos, concurrencia, correo simulado… |
+| Navegador (e2e) | `npm run test:e2e` | Recorridos reales en la app con **Playwright** |
+
+Las pruebas e2e abren el navegador **visible** (`headless: false`) y no descargan
+ninguno: usan Brave o Chrome si están instalados, o Edge, que trae Windows.
+Para forzar otro, define `E2E_NAVEGADOR` con la ruta al ejecutable.
+
+Levantan su propio entorno y **nunca tocan el de desarrollo**:
+
+* backend en el puerto **8011** con una base nueva sembrada por `seed.py` en
+  cada ejecución (`e2e/.tmp/`, ignorada por git) y el correo desactivado;
+* frontend en el **3100**, apuntando a ese backend (`FASTAPI_PORT`,
+  `FASTAPI_EXTERNO=1`).
+
+Escenarios en `e2e/`: visitante (`publico`), `autenticacion`, `cliente` y
+`personal`. Tras un fallo, la traza queda en `test-results/`
+(`npx playwright show-trace <ruta>/trace.zip`).
+
+Lo que queda por hacer está en [`PENDIENTES.md`](./PENDIENTES.md).
 
 ---
 
