@@ -14,7 +14,9 @@ from ..casos import (
     ConsultarProductosDep,
     CrearProductoDep,
     DesactivarProductoDep,
-    GestionarImagenesProductoDep,
+    ConsultarImagenesProductoDep,
+    EliminarImagenProductoDep,
+    SubirImagenProductoDep,
 )
 from ..deps import SoloPersonal
 from ..schemas.inventario import (
@@ -113,7 +115,7 @@ def desactivar_producto(
     response_model=list[ImagenOut],
     summary="Listar imágenes de un producto",
 )
-def listar_imagenes(producto_id: int, imagenes: GestionarImagenesProductoDep) -> list[ImagenOut]:
+def listar_imagenes(producto_id: int, imagenes: ConsultarImagenesProductoDep) -> list[ImagenOut]:
     return [ImagenOut.desde(i) for i in imagenes.listar(producto_id)]
 
 
@@ -125,14 +127,14 @@ def listar_imagenes(producto_id: int, imagenes: GestionarImagenesProductoDep) ->
     dependencies=[SoloPersonal],
 )
 def subir_imagen(
-    producto_id: int, datos: ImagenIn, imagenes: GestionarImagenesProductoDep
+    producto_id: int, datos: ImagenIn, caso: SubirImagenProductoDep
 ) -> ImagenOut:
     contenido = datos.imagen_base64.split(",", 1)[-1]  # admite data URIs
     try:
         binario = base64.b64decode(contenido, validate=True)
     except (binascii.Error, ValueError):
         raise ValidationError("El campo imagen_base64 no es base64 válido", "imagen_base64") from None
-    imagen = imagenes.subir(producto_id, binario, datos.nombre_archivo, datos.tipo_contenido)
+    imagen = caso.ejecutar(producto_id, binario, datos.nombre_archivo, datos.tipo_contenido)
     return ImagenOut.desde(imagen)
 
 
@@ -142,7 +144,7 @@ def subir_imagen(
     response_class=Response,
     responses={200: {"content": {"image/*": {}}}},
 )
-def descargar_imagen(imagen_id: int, imagenes: GestionarImagenesProductoDep) -> Response:
+def descargar_imagen(imagen_id: int, imagenes: ConsultarImagenesProductoDep) -> Response:
     imagen = imagenes.obtener(imagen_id)
     return Response(
         content=imagen.imagen_data or b"",
@@ -157,5 +159,5 @@ def descargar_imagen(imagen_id: int, imagenes: GestionarImagenesProductoDep) -> 
     summary="Eliminar una imagen",
     dependencies=[SoloPersonal],
 )
-def eliminar_imagen(imagen_id: int, imagenes: GestionarImagenesProductoDep) -> None:
-    imagenes.eliminar(imagen_id)
+def eliminar_imagen(imagen_id: int, caso: EliminarImagenProductoDep) -> None:
+    caso.ejecutar(imagen_id)

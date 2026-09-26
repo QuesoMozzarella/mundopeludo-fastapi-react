@@ -155,7 +155,7 @@ class DesactivarUsuario:
         return self.usuarios.actualizar(usuario)
 
 
-class GestionarPerfilVeterinario:
+class GuardarPerfilVeterinario:
     def __init__(
         self,
         usuarios: UsuarioRepository,
@@ -168,7 +168,7 @@ class GestionarPerfilVeterinario:
         self.especialidades = especialidades
         self.reloj = reloj
 
-    def guardar(
+    def ejecutar(
         self,
         usuario_id: int,
         documento: str | None = None,
@@ -200,7 +200,7 @@ class GestionarPerfilVeterinario:
         return self.perfiles.guardar(perfil)
 
 
-class GestionarPerfilCliente:
+class GuardarPerfilCliente:
     def __init__(
         self, usuarios: UsuarioRepository, perfiles: PerfilClienteRepository, reloj: Clock
     ):
@@ -208,7 +208,7 @@ class GestionarPerfilCliente:
         self.perfiles = perfiles
         self.reloj = reloj
 
-    def guardar(self, usuario_id: int, documento: str | None = None) -> PerfilCliente:
+    def ejecutar(self, usuario_id: int, documento: str | None = None) -> PerfilCliente:
         usuario = self.usuarios.obtener(usuario_id)
         if usuario is None:
             raise NotFoundError("Usuario", usuario_id)
@@ -220,20 +220,19 @@ class GestionarPerfilCliente:
         return self.perfiles.guardar(perfil)
 
 
-class GestionarEspecialidades:
+class ConsultarEspecialidades:
     def __init__(self, especialidades: EspecialidadRepository):
         self.especialidades = especialidades
 
     def listar(self, solo_activas: bool = False) -> list[Especialidad]:
         return self.especialidades.listar(solo_activas)
 
-    def obtener(self, especialidad_id: int) -> Especialidad:
-        especialidad = self.especialidades.obtener(especialidad_id)
-        if especialidad is None:
-            raise NotFoundError("Especialidad", especialidad_id)
-        return especialidad
 
-    def crear(
+class CrearEspecialidad:
+    def __init__(self, especialidades: EspecialidadRepository):
+        self.especialidades = especialidades
+
+    def ejecutar(
         self, codigo: str, nombre: str, descripcion: str | None = None, activa: bool = True
     ) -> Especialidad:
         if self.especialidades.obtener_por_codigo(codigo):
@@ -242,8 +241,13 @@ class GestionarEspecialidades:
             Especialidad(codigo=codigo, nombre=nombre, descripcion=descripcion, activa=activa)
         )
 
-    def actualizar(self, especialidad_id: int, cmd: ActualizarEspecialidadCmd) -> Especialidad:
-        actual = self.obtener(especialidad_id)
+
+class ActualizarEspecialidad:
+    def __init__(self, especialidades: EspecialidadRepository):
+        self.especialidades = especialidades
+
+    def ejecutar(self, especialidad_id: int, cmd: ActualizarEspecialidadCmd) -> Especialidad:
+        actual = _especialidad_o_error(self.especialidades, especialidad_id)
         nueva = Especialidad(
             id=actual.id,
             codigo=nuevo(cmd.codigo, actual.codigo),
@@ -256,6 +260,20 @@ class GestionarEspecialidades:
             raise ConflictError(f"Ya existe una especialidad con el código '{nueva.codigo}'")
         return self.especialidades.actualizar(nueva)
 
-    def eliminar(self, especialidad_id: int) -> None:
-        self.obtener(especialidad_id)
+
+class EliminarEspecialidad:
+    def __init__(self, especialidades: EspecialidadRepository):
+        self.especialidades = especialidades
+
+    def ejecutar(self, especialidad_id: int) -> None:
+        _especialidad_o_error(self.especialidades, especialidad_id)
         self.especialidades.eliminar(especialidad_id)
+
+
+def _especialidad_o_error(
+    especialidades: EspecialidadRepository, especialidad_id: int
+) -> Especialidad:
+    especialidad = especialidades.obtener(especialidad_id)
+    if especialidad is None:
+        raise NotFoundError("Especialidad", especialidad_id)
+    return especialidad

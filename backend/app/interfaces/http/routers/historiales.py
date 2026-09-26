@@ -4,7 +4,12 @@ from __future__ import annotations
 from fastapi import APIRouter, status
 
 from ....application.use_cases.historiales import ActualizarHistorialCmd, RegistrarHistorialCmd
-from ..casos import ActualizarHistorialDep, ConsultarHistorialesDep, RegistrarHistorialDep
+from ..casos import (
+    ActualizarHistorialDep,
+    ConsultarHistorialesDep,
+    EliminarHistorialDep,
+    RegistrarHistorialDep,
+)
 from ..deps import AccesoDep, SoloPersonal
 from ..schemas.citas import HistorialActualizarIn, HistorialIn, HistorialOut
 
@@ -89,5 +94,5 @@ def actualizar(
     summary="Eliminar un historial",
     dependencies=[SoloPersonal],
 )
-def eliminar(historial_id: int, caso: ActualizarHistorialDep) -> None:
-    caso.eliminar(historial_id)
+def eliminar(historial_id: int, caso: EliminarHistorialDep) -> None:
+    caso.ejecutar(historial_id)

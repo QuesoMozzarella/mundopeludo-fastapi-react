@@ -16,37 +16,53 @@ from ..cambios import SIN_CAMBIO, Cambio, nuevo, nuevo_o_vacio
 from ..read_models import MascotaVista
 
 
-class GestionarEspecies:
-    def __init__(self, especies: EspecieRepository, mascotas: MascotaRepository):
+class ConsultarEspecies:
+    def __init__(self, especies: EspecieRepository):
         self.especies = especies
-        self.mascotas = mascotas
 
     def listar(self) -> list[Especie]:
         return self.especies.listar()
 
-    def obtener(self, especie_id: int) -> Especie:
-        especie = self.especies.obtener(especie_id)
-        if especie is None:
-            raise NotFoundError("Especie", especie_id)
-        return especie
 
-    def crear(self, nombre: str) -> Especie:
+class CrearEspecie:
+    def __init__(self, especies: EspecieRepository):
+        self.especies = especies
+
+    def ejecutar(self, nombre: str) -> Especie:
         if self.especies.obtener_por_nombre(nombre):
             raise ConflictError(f"La especie '{nombre}' ya existe")
         return self.especies.crear(Especie(nombre=nombre))
 
-    def actualizar(self, especie_id: int, nombre: str) -> Especie:
-        especie = self.obtener(especie_id)
+
+class RenombrarEspecie:
+    def __init__(self, especies: EspecieRepository):
+        self.especies = especies
+
+    def ejecutar(self, especie_id: int, nombre: str) -> Especie:
+        especie = _especie_o_error(self.especies, especie_id)
         duplicada = self.especies.obtener_por_nombre(nombre)
         if duplicada and duplicada.id != especie.id:
             raise ConflictError(f"La especie '{nombre}' ya existe")
         return self.especies.actualizar(Especie(id=especie.id, nombre=nombre))
 
-    def eliminar(self, especie_id: int) -> None:
-        self.obtener(especie_id)
+
+class EliminarEspecie:
+    def __init__(self, especies: EspecieRepository, mascotas: MascotaRepository):
+        self.especies = especies
+        self.mascotas = mascotas
+
+    def ejecutar(self, especie_id: int) -> None:
+        _especie_o_error(self.especies, especie_id)
         if self.mascotas.listar(especie_id=especie_id, activo=None):
             raise ConflictError("No se puede eliminar: hay mascotas registradas con esa especie")
         self.especies.eliminar(especie_id)
+
+
+def _especie_o_error(especies: EspecieRepository, especie_id: int) -> Especie:
+    especie = especies.obtener(especie_id)
+    if especie is None:
+        raise NotFoundError("Especie", especie_id)
+    return especie
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -6,12 +6,15 @@ from fastapi import APIRouter, Query, status
 from ....application.use_cases.usuarios import ActualizarEspecialidadCmd, ActualizarUsuarioCmd
 from ....domain.value_objects import TipoUsuario
 from ..casos import (
+    ActualizarEspecialidadDep,
     ActualizarUsuarioDep,
+    ConsultarEspecialidadesDep,
     ConsultarUsuariosDep,
+    CrearEspecialidadDep,
     DesactivarUsuarioDep,
-    GestionarEspecialidadesDep,
-    GestionarPerfilClienteDep,
-    GestionarPerfilVeterinarioDep,
+    EliminarEspecialidadDep,
+    GuardarPerfilClienteDep,
+    GuardarPerfilVeterinarioDep,
 )
 from ..deps import AccesoDep, SoloAdmin, SoloPersonal
 from ..schemas.usuarios import (
@@ -103,10 +106,10 @@ def desactivar_usuario(
     summary="Actualizar el perfil de cliente",
 )
 def guardar_perfil_cliente(
-    usuario_id: int, datos: PerfilClienteIn, caso: GestionarPerfilClienteDep, acceso: AccesoDep
+    usuario_id: int, datos: PerfilClienteIn, caso: GuardarPerfilClienteDep, acceso: AccesoDep
 ) -> PerfilClienteOut:
     acceso.propietario(usuario_id)
-    return PerfilClienteOut.desde(caso.guardar(usuario_id, datos.documento))
+    return PerfilClienteOut.desde(caso.ejecutar(usuario_id, datos.documento))
 
 
 @router.put(
@@ -118,12 +121,12 @@ def guardar_perfil_cliente(
 def guardar_perfil_veterinario(
     usuario_id: int,
     datos: PerfilVeterinarioIn,
-    caso: GestionarPerfilVeterinarioDep,
+    caso: GuardarPerfilVeterinarioDep,
     acceso: AccesoDep,
 ) -> PerfilVeterinarioOut:
     # Un veterinario edita su propio perfil; el de otro, sólo un administrador.
     acceso.propietario(usuario_id, personal=False)
-    perfil = caso.guardar(
+    perfil = caso.ejecutar(
         usuario_id,
         documento=datos.documento,
         activo=datos.activo,
@@ -136,9 +139,9 @@ def guardar_perfil_veterinario(
 # --------------------------- especialidades ---------------------------
 @router.get("/especialidades", response_model=list[EspecialidadOut], summary="Listar especialidades")
 def listar_especialidades(
-    caso: GestionarEspecialidadesDep, solo_activas: bool = False
+    consulta: ConsultarEspecialidadesDep, solo_activas: bool = False
 ) -> list[EspecialidadOut]:
-    return [EspecialidadOut.desde(e) for e in caso.listar(solo_activas)]
+    return [EspecialidadOut.desde(e) for e in consulta.listar(solo_activas)]
 
 
 @router.post(
@@ -148,9 +151,9 @@ def listar_especialidades(
     summary="Crear una especialidad",
     dependencies=[SoloAdmin],
 )
-def crear_especialidad(datos: EspecialidadIn, caso: GestionarEspecialidadesDep) -> EspecialidadOut:
+def crear_especialidad(datos: EspecialidadIn, caso: CrearEspecialidadDep) -> EspecialidadOut:
     return EspecialidadOut.desde(
-        caso.crear(datos.codigo, datos.nombre, datos.descripcion, datos.activa)
+        caso.ejecutar(datos.codigo, datos.nombre, datos.descripcion, datos.activa)
     )
 
 
@@ -161,10 +164,10 @@ def crear_especialidad(datos: EspecialidadIn, caso: GestionarEspecialidadesDep) 
     dependencies=[SoloAdmin],
 )
 def actualizar_especialidad(
-    especialidad_id: int, datos: EspecialidadActualizarIn, caso: GestionarEspecialidadesDep
+    especialidad_id: int, datos: EspecialidadActualizarIn, caso: ActualizarEspecialidadDep
 ) -> EspecialidadOut:
     cmd = ActualizarEspecialidadCmd(**datos.model_dump(exclude_unset=True))
-    return EspecialidadOut.desde(caso.actualizar(especialidad_id, cmd))
+    return EspecialidadOut.desde(caso.ejecutar(especialidad_id, cmd))
 
 
 @router.delete(
@@ -173,5 +176,5 @@ def actualizar_especialidad(
     summary="Eliminar una especialidad",
     dependencies=[SoloAdmin],
 )
-def eliminar_especialidad(especialidad_id: int, caso: GestionarEspecialidadesDep) -> None:
-    caso.eliminar(especialidad_id)
+def eliminar_especialidad(especialidad_id: int, caso: EliminarEspecialidadDep) -> None:
+    caso.ejecutar(especialidad_id)

@@ -20,13 +20,16 @@ backend/
 │   │   └── ports/              #    interfaces: repositorios y servicios
 │   ├── application/            #  ← CASOS DE USO. Orquestan el dominio
 │   │   ├── read_models.py      #    agregados de lectura para las pantallas
-│   │   └── use_cases/
+│   │   ├── cambios.py          #    SIN_CAMBIO: actualizaciones parciales
+│   │   └── use_cases/          #    un caso por intención + sus comandos *Cmd
 │   ├── infrastructure/         #  ← ADAPTADORES DE SALIDA
-│   │   ├── db/                 #    conexión y DDL de SQLite
+│   │   ├── db/                 #    conexión, DDL y migraciones de SQLite
 │   │   ├── repositories/       #    implementación de los puertos con SQL
-│   │   └── security/           #    pbkdf2_sha256 y JWT HS256 (stdlib)
+│   │   ├── security/           #    pbkdf2_sha256 y JWT HS256 (stdlib)
+│   │   └── notificaciones/     #    correo SMTP (smtplib)
 │   └── interfaces/http/        #  ← ADAPTADOR DE ENTRADA
-│       ├── deps.py             #    composition root e inyección
+│       ├── deps.py             #    repositorios, servicios, sesión y permisos
+│       ├── casos.py            #    proveedores de casos de uso (Depends)
 │       ├── errors.py           #    errores de dominio → códigos HTTP
 │       ├── routers/            #    endpoints FastAPI
 │       └── schemas/            #    modelos Pydantic del contrato
@@ -36,9 +39,26 @@ backend/
 **Regla de dependencia**: las flechas apuntan siempre hacia dentro.
 `domain/` no importa nada de las otras capas; `application/` sólo conoce
 `domain/`; `infrastructure/` e `interfaces/` conocen las de dentro, y sólo
-`bootstrap.py` + `deps.py` saben qué implementación concreta se usa. Cambiar
+`bootstrap.py`, `deps.py` y `casos.py` saben qué implementación concreta se usa. Cambiar
 SQLite por PostgreSQL significa escribir otros repositorios y una línea en
 `deps.py`: ni el dominio ni los casos de uso se enteran.
+
+### Convenciones de la capa de aplicación
+
+* **Un caso de uso por intención** (SRP): `AgendarCita`, `CambiarEstadoCita`,
+  `EliminarCita`... cada uno con un único método `ejecutar(...)`. Las lecturas
+  van en `Consultar*` (`listar` / `obtener`), que devuelven los modelos de
+  `read_models.py`. Sólo `GestionarCarrito` agrupa varias operaciones: todas
+  modifican el mismo agregado y comparten sus ayudantes.
+* **Comandos tipados**: las altas y actualizaciones reciben un `*Cmd`
+  (dataclass inmutable) en vez de un `dict`. En los de actualización cada
+  campo vale `SIN_CAMBIO` si no se envió; `nuevo()` y `nuevo_o_vacio()`
+  (`application/cambios.py`) deciden qué significa `null` en cada campo.
+* **Inyección**: los routers declaran el caso que necesitan
+  (`caso: AgendarCitaDep`) y `interfaces/http/casos.py` lo construye con sus
+  repositorios y servicios. Un router nunca toca un repositorio.
+* **Sin reloj oculto**: el dominio no llama a `datetime.now()`; las fechas le
+  llegan del puerto `Clock` a través de los casos de uso.
 
 ---
 

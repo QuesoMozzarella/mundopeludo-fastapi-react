@@ -13,13 +13,22 @@ from ....application.use_cases.citas import (
 )
 from ..casos import (
     ActualizarCitaDep,
+    ActualizarServicioDep,
     AgendarCitaDep,
+    CambiarEstadoCitaDep,
     ConsultarAgendaDiaDep,
     ConsultarCitasDep,
+    ConsultarDisponibilidadDep,
+    ConsultarEstadosCitaDep,
     ConsultarMascotasDep,
-    GestionarDisponibilidadDep,
-    GestionarEstadosCitaDep,
-    GestionarServiciosDep,
+    ConsultarServiciosDep,
+    CrearEstadoCitaDep,
+    CrearServicioDep,
+    DeclararDisponibilidadDep,
+    EliminarCitaDep,
+    EliminarDisponibilidadDep,
+    EliminarEstadoCitaDep,
+    EliminarServicioDep,
 )
 from ..deps import AccesoDep, SoloAdmin, SoloPersonal
 from ..schemas.citas import (
@@ -41,8 +50,8 @@ router = APIRouter(prefix="/api", tags=["citas"])
 
 # --------------------------- estados de cita ---------------------------
 @router.get("/estados-cita", response_model=list[EstadoCitaOut], summary="Listar estados de cita")
-def listar_estados(caso: GestionarEstadosCitaDep) -> list[EstadoCitaOut]:
-    return [EstadoCitaOut.desde(e) for e in caso.listar()]
+def listar_estados(consulta: ConsultarEstadosCitaDep) -> list[EstadoCitaOut]:
+    return [EstadoCitaOut.desde(e) for e in consulta.listar()]
 
 
 @router.post(
@@ -52,8 +61,8 @@ def listar_estados(caso: GestionarEstadosCitaDep) -> list[EstadoCitaOut]:
     summary="Crear un estado de cita",
     dependencies=[SoloAdmin],
 )
-def crear_estado(datos: EstadoCitaIn, caso: GestionarEstadosCitaDep) -> EstadoCitaOut:
-    return EstadoCitaOut.desde(caso.crear(datos.nombre, datos.descripcion, datos.orden))
+def crear_estado(datos: EstadoCitaIn, caso: CrearEstadoCitaDep) -> EstadoCitaOut:
+    return EstadoCitaOut.desde(caso.ejecutar(datos.nombre, datos.descripcion, datos.orden))
 
 
 @router.delete(
@@ -62,21 +71,23 @@ def crear_estado(datos: EstadoCitaIn, caso: GestionarEstadosCitaDep) -> EstadoCi
     summary="Eliminar un estado de cita",
     dependencies=[SoloAdmin],
 )
-def eliminar_estado(estado_id: int, caso: GestionarEstadosCitaDep) -> None:
-    caso.eliminar(estado_id)
+def eliminar_estado(estado_id: int, caso: EliminarEstadoCitaDep) -> None:
+    caso.ejecutar(estado_id)
 
 
 # ------------------------------ servicios ------------------------------
 @router.get("/servicios", response_model=list[ServicioOut], summary="Listar servicios")
 def listar_servicios(
-    caso: GestionarServiciosDep, solo_activos: bool = False, veterinario_id: int | None = None
+    consulta: ConsultarServiciosDep,
+    solo_activos: bool = False,
+    veterinario_id: int | None = None,
 ) -> list[ServicioOut]:
-    return [ServicioOut.desde(v) for v in caso.listar(solo_activos, veterinario_id)]
+    return [ServicioOut.desde(v) for v in consulta.listar(solo_activos, veterinario_id)]
 
 
 @router.get("/servicios/{servicio_id}", response_model=ServicioOut, summary="Ver un servicio")
-def obtener_servicio(servicio_id: int, caso: GestionarServiciosDep) -> ServicioOut:
-    return ServicioOut.desde(caso.obtener(servicio_id))
+def obtener_servicio(servicio_id: int, consulta: ConsultarServiciosDep) -> ServicioOut:
+    return ServicioOut.desde(consulta.obtener(servicio_id))
 
 
 @router.post(
@@ -86,8 +97,11 @@ def obtener_servicio(servicio_id: int, caso: GestionarServiciosDep) -> ServicioO
     summary="Crear un servicio",
     dependencies=[SoloAdmin],
 )
-def crear_servicio(datos: ServicioIn, caso: GestionarServiciosDep) -> ServicioOut:
-    return ServicioOut.desde(caso.crear(CrearServicioCmd(**datos.model_dump())))
+def crear_servicio(
+    datos: ServicioIn, caso: CrearServicioDep, consulta: ConsultarServiciosDep
+) -> ServicioOut:
+    servicio = caso.ejecutar(CrearServicioCmd(**datos.model_dump()))
+    return ServicioOut.desde(consulta.obtener(servicio.id))
 
 
 @router.put(
@@ -97,10 +111,13 @@ def crear_servicio(datos: ServicioIn, caso: GestionarServiciosDep) -> ServicioOu
     dependencies=[SoloAdmin],
 )
 def actualizar_servicio(
-    servicio_id: int, datos: ServicioActualizarIn, caso: GestionarServiciosDep
+    servicio_id: int,
+    datos: ServicioActualizarIn,
+    caso: ActualizarServicioDep,
+    consulta: ConsultarServiciosDep,
 ) -> ServicioOut:
-    cmd = ActualizarServicioCmd(**datos.model_dump(exclude_unset=True))
-    return ServicioOut.desde(caso.actualizar(servicio_id, cmd))
+    caso.ejecutar(servicio_id, ActualizarServicioCmd(**datos.model_dump(exclude_unset=True)))
+    return ServicioOut.desde(consulta.obtener(servicio_id))
 
 
 @router.delete(
@@ -109,8 +126,8 @@ def actualizar_servicio(
     summary="Eliminar un servicio",
     dependencies=[SoloAdmin],
 )
-def eliminar_servicio(servicio_id: int, caso: GestionarServiciosDep) -> None:
-    caso.eliminar(servicio_id)
+def eliminar_servicio(servicio_id: int, caso: EliminarServicioDep) -> None:
+    caso.ejecutar(servicio_id)
 
 
 # ---------------------------- disponibilidad ----------------------------
@@ -120,11 +137,11 @@ def eliminar_servicio(servicio_id: int, caso: GestionarServiciosDep) -> None:
     summary="Listar franjas de disponibilidad",
 )
 def listar_disponibilidades(
-    caso: GestionarDisponibilidadDep,
+    consulta: ConsultarDisponibilidadDep,
     veterinario_id: int | None = None,
     dia_semana: int | None = None,
 ) -> list[DisponibilidadOut]:
-    return [DisponibilidadOut.desde(v) for v in caso.listar(veterinario_id, dia_semana)]
+    return [DisponibilidadOut.desde(v) for v in consulta.listar(veterinario_id, dia_semana)]
 
 
 @router.post(
@@ -135,14 +152,14 @@ def listar_disponibilidades(
     dependencies=[SoloPersonal],
 )
 def crear_disponibilidad(
-    datos: DisponibilidadIn, caso: GestionarDisponibilidadDep
+    datos: DisponibilidadIn,
+    caso: DeclararDisponibilidadDep,
+    consulta: ConsultarDisponibilidadDep,
 ) -> DisponibilidadOut:
-    creada = caso.crear(datos.veterinario_id, datos.dia_semana, datos.hora_inicio, datos.hora_fin)
-    return [
-        DisponibilidadOut.desde(v)
-        for v in caso.listar(datos.veterinario_id, datos.dia_semana)
-        if v.disponibilidad.id == creada.id
-    ][0]
+    creada = caso.ejecutar(
+        datos.veterinario_id, datos.dia_semana, datos.hora_inicio, datos.hora_fin
+    )
+    return DisponibilidadOut.desde(consulta.obtener(creada.id))
 
 
 @router.delete(
@@ -151,8 +168,8 @@ def crear_disponibilidad(
     summary="Eliminar una franja",
     dependencies=[SoloPersonal],
 )
-def eliminar_disponibilidad(disponibilidad_id: int, caso: GestionarDisponibilidadDep) -> None:
-    caso.eliminar(disponibilidad_id)
+def eliminar_disponibilidad(disponibilidad_id: int, caso: EliminarDisponibilidadDep) -> None:
+    caso.ejecutar(disponibilidad_id)
 
 
 @router.get(
@@ -225,12 +242,12 @@ def actualizar_cita(
 def cambiar_estado(
     cita_id: int,
     datos: CambioEstadoIn,
-    caso: ActualizarCitaDep,
+    caso: CambiarEstadoCitaDep,
     consulta: ConsultarCitasDep,
     acceso: AccesoDep,
 ) -> CitaOut:
     acceso.propietario(consulta.obtener(cita_id).cliente_id)
-    caso.cambiar_estado(cita_id, datos.estado_id, datos.estado)
+    caso.ejecutar(cita_id, datos.estado_id, datos.estado)
     return CitaOut.desde(consulta.obtener(cita_id))
 
 
@@ -240,5 +257,5 @@ def cambiar_estado(
     summary="Eliminar una cita",
     dependencies=[SoloPersonal],
 )
-def eliminar_cita(cita_id: int, caso: ActualizarCitaDep) -> None:
-    caso.eliminar(cita_id)
+def eliminar_cita(cita_id: int, caso: EliminarCitaDep) -> None:
+    caso.ejecutar(cita_id)

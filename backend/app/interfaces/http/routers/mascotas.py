@@ -9,8 +9,11 @@ from ..casos import (
     ActualizarMascotaDep,
     ConsultarMascotasDep,
     DarDeBajaMascotaDep,
-    GestionarEspeciesDep,
+    ConsultarEspeciesDep,
+    CrearEspecieDep,
+    EliminarEspecieDep,
     RegistrarMascotaDep,
+    RenombrarEspecieDep,
 )
 from ..deps import AccesoDep, SoloAdmin
 from ..schemas.mascotas import (
@@ -26,8 +29,8 @@ router = APIRouter(prefix="/api", tags=["mascotas"])
 
 # ------------------------------ especies ------------------------------
 @router.get("/especies", response_model=list[EspecieOut], summary="Listar especies")
-def listar_especies(caso: GestionarEspeciesDep) -> list[EspecieOut]:
-    return [EspecieOut.desde(e) for e in caso.listar()]
+def listar_especies(consulta: ConsultarEspeciesDep) -> list[EspecieOut]:
+    return [EspecieOut.desde(e) for e in consulta.listar()]
 
 
 @router.post(
@@ -37,8 +40,8 @@ def listar_especies(caso: GestionarEspeciesDep) -> list[EspecieOut]:
     summary="Crear una especie",
     dependencies=[SoloAdmin],
 )
-def crear_especie(datos: EspecieIn, caso: GestionarEspeciesDep) -> EspecieOut:
-    return EspecieOut.desde(caso.crear(datos.nombre))
+def crear_especie(datos: EspecieIn, caso: CrearEspecieDep) -> EspecieOut:
+    return EspecieOut.desde(caso.ejecutar(datos.nombre))
 
 
 @router.put(
@@ -48,9 +51,9 @@ def crear_especie(datos: EspecieIn, caso: GestionarEspeciesDep) -> EspecieOut:
     dependencies=[SoloAdmin],
 )
 def actualizar_especie(
-    especie_id: int, datos: EspecieIn, caso: GestionarEspeciesDep
+    especie_id: int, datos: EspecieIn, caso: RenombrarEspecieDep
 ) -> EspecieOut:
-    return EspecieOut.desde(caso.actualizar(especie_id, datos.nombre))
+    return EspecieOut.desde(caso.ejecutar(especie_id, datos.nombre))
 
 
 @router.delete(
@@ -59,8 +62,8 @@ def actualizar_especie(
     summary="Eliminar una especie",
     dependencies=[SoloAdmin],
 )
-def eliminar_especie(especie_id: int, caso: GestionarEspeciesDep) -> None:
-    caso.eliminar(especie_id)
+def eliminar_especie(especie_id: int, caso: EliminarEspecieDep) -> None:
+    caso.ejecutar(especie_id)
 
 
 # ------------------------------ mascotas ------------------------------

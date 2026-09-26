@@ -192,7 +192,12 @@ class ActualizarHistorial:
         )
         return self.historiales.actualizar(historial)
 
-    def eliminar(self, historial_id: int) -> None:
+
+class EliminarHistorial:
+    def __init__(self, historiales: HistorialMedicoRepository):
+        self.historiales = historiales
+
+    def ejecutar(self, historial_id: int) -> None:
         if self.historiales.obtener(historial_id) is None:
             raise NotFoundError("Historial médico", historial_id)
         self.historiales.eliminar(historial_id)

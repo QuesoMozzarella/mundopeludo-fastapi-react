@@ -18,19 +18,25 @@ from ...application.use_cases.autenticacion import (
     SolicitarCodigoRecuperacion,
 )
 from ...application.use_cases.usuarios import (
+    ActualizarEspecialidad,
     ActualizarUsuario,
+    ConsultarEspecialidades,
     ConsultarUsuarios,
+    CrearEspecialidad,
     DesactivarUsuario,
-    GestionarEspecialidades,
-    GestionarPerfilCliente,
-    GestionarPerfilVeterinario,
+    EliminarEspecialidad,
+    GuardarPerfilCliente,
+    GuardarPerfilVeterinario,
 )
 from ...application.use_cases.mascotas import (
     ActualizarMascota,
+    ConsultarEspecies,
     ConsultarMascotas,
+    CrearEspecie,
     DarDeBajaMascota,
-    GestionarEspecies,
+    EliminarEspecie,
     RegistrarMascota,
+    RenombrarEspecie,
 )
 from ...application.use_cases.adopciones import (
     CancelarSolicitudAdopcion,
@@ -41,27 +47,39 @@ from ...application.use_cases.adopciones import (
 )
 from ...application.use_cases.citas import (
     ActualizarCita,
+    ActualizarServicio,
     AgendarCita,
+    CambiarEstadoCita,
     ConsultarAgendaDia,
     ConsultarCitas,
-    GestionarDisponibilidad,
-    GestionarEstadosCita,
-    GestionarServicios,
+    ConsultarDisponibilidad,
+    ConsultarEstadosCita,
+    ConsultarServicios,
+    CrearEstadoCita,
+    CrearServicio,
+    DeclararDisponibilidad,
+    EliminarCita,
+    EliminarDisponibilidad,
+    EliminarEstadoCita,
+    EliminarServicio,
     ReglasDeAgenda,
 )
 from ...application.use_cases.historiales import (
     ActualizarHistorial,
     ConsultarHistoriales,
+    EliminarHistorial,
     RegistrarHistorial,
 )
 from ...application.use_cases.inventario import (
     ActualizarProducto,
     AjustarStock,
+    ConsultarImagenesProducto,
     ConsultarProductos,
     CrearProducto,
     DesactivarProducto,
+    EliminarImagenProducto,
     GeneradorSku,
-    GestionarImagenesProducto,
+    SubirImagenProducto,
 )
 from ...application.use_cases.carrito import (
     ConsultarPedidos,
@@ -136,7 +154,15 @@ SolicitarCodigoRecuperacionDep = Annotated[
     SolicitarCodigoRecuperacion, Depends(solicitar_codigo_recuperacion)
 ]
 
+
 # ------------------------------ usuarios --------------------------------
+
+
+def actualizar_especialidad(repos: ReposDep) -> ActualizarEspecialidad:
+    return ActualizarEspecialidad(repos.especialidades)
+
+
+ActualizarEspecialidadDep = Annotated[ActualizarEspecialidad, Depends(actualizar_especialidad)]
 
 
 def actualizar_usuario(repos: ReposDep, servicios: ServiciosDep) -> ActualizarUsuario:
@@ -151,6 +177,13 @@ def actualizar_usuario(repos: ReposDep, servicios: ServiciosDep) -> ActualizarUs
 ActualizarUsuarioDep = Annotated[ActualizarUsuario, Depends(actualizar_usuario)]
 
 
+def consultar_especialidades(repos: ReposDep) -> ConsultarEspecialidades:
+    return ConsultarEspecialidades(repos.especialidades)
+
+
+ConsultarEspecialidadesDep = Annotated[ConsultarEspecialidades, Depends(consultar_especialidades)]
+
+
 def consultar_usuarios(repos: ReposDep) -> ConsultarUsuarios:
     return ConsultarUsuarios(
         repos.usuarios,
@@ -163,6 +196,13 @@ def consultar_usuarios(repos: ReposDep) -> ConsultarUsuarios:
 ConsultarUsuariosDep = Annotated[ConsultarUsuarios, Depends(consultar_usuarios)]
 
 
+def crear_especialidad(repos: ReposDep) -> CrearEspecialidad:
+    return CrearEspecialidad(repos.especialidades)
+
+
+CrearEspecialidadDep = Annotated[CrearEspecialidad, Depends(crear_especialidad)]
+
+
 def desactivar_usuario(repos: ReposDep) -> DesactivarUsuario:
     return DesactivarUsuario(repos.usuarios)
 
@@ -170,25 +210,25 @@ def desactivar_usuario(repos: ReposDep) -> DesactivarUsuario:
 DesactivarUsuarioDep = Annotated[DesactivarUsuario, Depends(desactivar_usuario)]
 
 
-def gestionar_especialidades(repos: ReposDep) -> GestionarEspecialidades:
-    return GestionarEspecialidades(repos.especialidades)
+def eliminar_especialidad(repos: ReposDep) -> EliminarEspecialidad:
+    return EliminarEspecialidad(repos.especialidades)
 
 
-GestionarEspecialidadesDep = Annotated[GestionarEspecialidades, Depends(gestionar_especialidades)]
+EliminarEspecialidadDep = Annotated[EliminarEspecialidad, Depends(eliminar_especialidad)]
 
 
-def gestionar_perfil_cliente(repos: ReposDep, servicios: ServiciosDep) -> GestionarPerfilCliente:
-    return GestionarPerfilCliente(repos.usuarios, repos.perfiles_cliente, servicios.reloj)
+def guardar_perfil_cliente(repos: ReposDep, servicios: ServiciosDep) -> GuardarPerfilCliente:
+    return GuardarPerfilCliente(repos.usuarios, repos.perfiles_cliente, servicios.reloj)
 
 
-GestionarPerfilClienteDep = Annotated[GestionarPerfilCliente, Depends(gestionar_perfil_cliente)]
+GuardarPerfilClienteDep = Annotated[GuardarPerfilCliente, Depends(guardar_perfil_cliente)]
 
 
-def gestionar_perfil_veterinario(
+def guardar_perfil_veterinario(
     repos: ReposDep,
     servicios: ServiciosDep,
-) -> GestionarPerfilVeterinario:
-    return GestionarPerfilVeterinario(
+) -> GuardarPerfilVeterinario:
+    return GuardarPerfilVeterinario(
         repos.usuarios,
         repos.perfiles_veterinario,
         repos.especialidades,
@@ -196,9 +236,10 @@ def gestionar_perfil_veterinario(
     )
 
 
-GestionarPerfilVeterinarioDep = Annotated[
-    GestionarPerfilVeterinario, Depends(gestionar_perfil_veterinario)
+GuardarPerfilVeterinarioDep = Annotated[
+    GuardarPerfilVeterinario, Depends(guardar_perfil_veterinario)
 ]
+
 
 # ------------------------------ mascotas --------------------------------
 
@@ -210,11 +251,25 @@ def actualizar_mascota(repos: ReposDep) -> ActualizarMascota:
 ActualizarMascotaDep = Annotated[ActualizarMascota, Depends(actualizar_mascota)]
 
 
+def consultar_especies(repos: ReposDep) -> ConsultarEspecies:
+    return ConsultarEspecies(repos.especies)
+
+
+ConsultarEspeciesDep = Annotated[ConsultarEspecies, Depends(consultar_especies)]
+
+
 def consultar_mascotas(repos: ReposDep) -> ConsultarMascotas:
     return ConsultarMascotas(repos.mascotas, repos.especies, repos.usuarios)
 
 
 ConsultarMascotasDep = Annotated[ConsultarMascotas, Depends(consultar_mascotas)]
+
+
+def crear_especie(repos: ReposDep) -> CrearEspecie:
+    return CrearEspecie(repos.especies)
+
+
+CrearEspecieDep = Annotated[CrearEspecie, Depends(crear_especie)]
 
 
 def dar_de_baja_mascota(repos: ReposDep) -> DarDeBajaMascota:
@@ -224,11 +279,11 @@ def dar_de_baja_mascota(repos: ReposDep) -> DarDeBajaMascota:
 DarDeBajaMascotaDep = Annotated[DarDeBajaMascota, Depends(dar_de_baja_mascota)]
 
 
-def gestionar_especies(repos: ReposDep) -> GestionarEspecies:
-    return GestionarEspecies(repos.especies, repos.mascotas)
+def eliminar_especie(repos: ReposDep) -> EliminarEspecie:
+    return EliminarEspecie(repos.especies, repos.mascotas)
 
 
-GestionarEspeciesDep = Annotated[GestionarEspecies, Depends(gestionar_especies)]
+EliminarEspecieDep = Annotated[EliminarEspecie, Depends(eliminar_especie)]
 
 
 def registrar_mascota(repos: ReposDep, servicios: ServiciosDep) -> RegistrarMascota:
@@ -236,6 +291,14 @@ def registrar_mascota(repos: ReposDep, servicios: ServiciosDep) -> RegistrarMasc
 
 
 RegistrarMascotaDep = Annotated[RegistrarMascota, Depends(registrar_mascota)]
+
+
+def renombrar_especie(repos: ReposDep) -> RenombrarEspecie:
+    return RenombrarEspecie(repos.especies)
+
+
+RenombrarEspecieDep = Annotated[RenombrarEspecie, Depends(renombrar_especie)]
+
 
 # ------------------------------ adopciones ------------------------------
 
@@ -300,7 +363,18 @@ def solicitar_adopcion(repos: ReposDep, servicios: ServiciosDep) -> SolicitarAdo
 
 SolicitarAdopcionDep = Annotated[SolicitarAdopcion, Depends(solicitar_adopcion)]
 
+
 # ------------------------------ citas -----------------------------------
+
+
+def reglas_de_agenda(repos: ReposDep, servicios: ServiciosDep) -> ReglasDeAgenda:
+    return ReglasDeAgenda(
+        repos.citas,
+        repos.usuarios,
+        repos.servicios,
+        repos.disponibilidades,
+        servicios.reloj,
+    )
 
 
 def actualizar_cita(repos: ReposDep, servicios: ServiciosDep) -> ActualizarCita:
@@ -308,6 +382,13 @@ def actualizar_cita(repos: ReposDep, servicios: ServiciosDep) -> ActualizarCita:
 
 
 ActualizarCitaDep = Annotated[ActualizarCita, Depends(actualizar_cita)]
+
+
+def actualizar_servicio(repos: ReposDep) -> ActualizarServicio:
+    return ActualizarServicio(repos.servicios, repos.usuarios, repos.especialidades)
+
+
+ActualizarServicioDep = Annotated[ActualizarServicio, Depends(actualizar_servicio)]
 
 
 def agendar_cita(repos: ReposDep, servicios: ServiciosDep) -> AgendarCita:
@@ -320,6 +401,13 @@ def agendar_cita(repos: ReposDep, servicios: ServiciosDep) -> AgendarCita:
 
 
 AgendarCitaDep = Annotated[AgendarCita, Depends(agendar_cita)]
+
+
+def cambiar_estado_cita(repos: ReposDep) -> CambiarEstadoCita:
+    return CambiarEstadoCita(repos.citas, repos.estados_cita)
+
+
+CambiarEstadoCitaDep = Annotated[CambiarEstadoCita, Depends(cambiar_estado_cita)]
 
 
 def consultar_agenda_dia(repos: ReposDep) -> ConsultarAgendaDia:
@@ -343,35 +431,75 @@ def consultar_citas(repos: ReposDep) -> ConsultarCitas:
 ConsultarCitasDep = Annotated[ConsultarCitas, Depends(consultar_citas)]
 
 
-def gestionar_disponibilidad(repos: ReposDep) -> GestionarDisponibilidad:
-    return GestionarDisponibilidad(repos.disponibilidades, repos.usuarios)
+def consultar_disponibilidad(repos: ReposDep) -> ConsultarDisponibilidad:
+    return ConsultarDisponibilidad(repos.disponibilidades, repos.usuarios)
 
 
-GestionarDisponibilidadDep = Annotated[GestionarDisponibilidad, Depends(gestionar_disponibilidad)]
+ConsultarDisponibilidadDep = Annotated[ConsultarDisponibilidad, Depends(consultar_disponibilidad)]
 
 
-def gestionar_estados_cita(repos: ReposDep) -> GestionarEstadosCita:
-    return GestionarEstadosCita(repos.estados_cita, repos.citas)
+def consultar_estados_cita(repos: ReposDep) -> ConsultarEstadosCita:
+    return ConsultarEstadosCita(repos.estados_cita)
 
 
-GestionarEstadosCitaDep = Annotated[GestionarEstadosCita, Depends(gestionar_estados_cita)]
+ConsultarEstadosCitaDep = Annotated[ConsultarEstadosCita, Depends(consultar_estados_cita)]
 
 
-def gestionar_servicios(repos: ReposDep) -> GestionarServicios:
-    return GestionarServicios(repos.servicios, repos.usuarios, repos.especialidades, repos.citas)
+def consultar_servicios(repos: ReposDep) -> ConsultarServicios:
+    return ConsultarServicios(repos.servicios, repos.usuarios, repos.especialidades)
 
 
-GestionarServiciosDep = Annotated[GestionarServicios, Depends(gestionar_servicios)]
+ConsultarServiciosDep = Annotated[ConsultarServicios, Depends(consultar_servicios)]
 
 
-def reglas_de_agenda(repos: ReposDep, servicios: ServiciosDep) -> ReglasDeAgenda:
-    return ReglasDeAgenda(
-        repos.citas,
-        repos.usuarios,
-        repos.servicios,
-        repos.disponibilidades,
-        servicios.reloj,
-    )
+def crear_estado_cita(repos: ReposDep) -> CrearEstadoCita:
+    return CrearEstadoCita(repos.estados_cita)
+
+
+CrearEstadoCitaDep = Annotated[CrearEstadoCita, Depends(crear_estado_cita)]
+
+
+def crear_servicio(repos: ReposDep) -> CrearServicio:
+    return CrearServicio(repos.servicios, repos.usuarios, repos.especialidades)
+
+
+CrearServicioDep = Annotated[CrearServicio, Depends(crear_servicio)]
+
+
+def declarar_disponibilidad(repos: ReposDep) -> DeclararDisponibilidad:
+    return DeclararDisponibilidad(repos.disponibilidades, repos.usuarios)
+
+
+DeclararDisponibilidadDep = Annotated[DeclararDisponibilidad, Depends(declarar_disponibilidad)]
+
+
+def eliminar_cita(repos: ReposDep) -> EliminarCita:
+    return EliminarCita(repos.citas)
+
+
+EliminarCitaDep = Annotated[EliminarCita, Depends(eliminar_cita)]
+
+
+def eliminar_disponibilidad(repos: ReposDep) -> EliminarDisponibilidad:
+    return EliminarDisponibilidad(repos.disponibilidades)
+
+
+EliminarDisponibilidadDep = Annotated[EliminarDisponibilidad, Depends(eliminar_disponibilidad)]
+
+
+def eliminar_estado_cita(repos: ReposDep) -> EliminarEstadoCita:
+    return EliminarEstadoCita(repos.estados_cita, repos.citas)
+
+
+EliminarEstadoCitaDep = Annotated[EliminarEstadoCita, Depends(eliminar_estado_cita)]
+
+
+def eliminar_servicio(repos: ReposDep) -> EliminarServicio:
+    return EliminarServicio(repos.servicios, repos.citas)
+
+
+EliminarServicioDep = Annotated[EliminarServicio, Depends(eliminar_servicio)]
+
 
 # ------------------------------ historiales -----------------------------
 
@@ -390,6 +518,13 @@ def consultar_historiales(repos: ReposDep) -> ConsultarHistoriales:
 ConsultarHistorialesDep = Annotated[ConsultarHistoriales, Depends(consultar_historiales)]
 
 
+def eliminar_historial(repos: ReposDep) -> EliminarHistorial:
+    return EliminarHistorial(repos.historiales)
+
+
+EliminarHistorialDep = Annotated[EliminarHistorial, Depends(eliminar_historial)]
+
+
 def registrar_historial(repos: ReposDep, servicios: ServiciosDep) -> RegistrarHistorial:
     return RegistrarHistorial(
         repos.historiales,
@@ -402,6 +537,7 @@ def registrar_historial(repos: ReposDep, servicios: ServiciosDep) -> RegistrarHi
 
 
 RegistrarHistorialDep = Annotated[RegistrarHistorial, Depends(registrar_historial)]
+
 
 # ------------------------------ inventario ------------------------------
 
@@ -418,6 +554,15 @@ def ajustar_stock(repos: ReposDep, servicios: ServiciosDep) -> AjustarStock:
 
 
 AjustarStockDep = Annotated[AjustarStock, Depends(ajustar_stock)]
+
+
+def consultar_imagenes_producto(repos: ReposDep) -> ConsultarImagenesProducto:
+    return ConsultarImagenesProducto(repos.imagenes, repos.productos)
+
+
+ConsultarImagenesProductoDep = Annotated[
+    ConsultarImagenesProducto, Depends(consultar_imagenes_producto)
+]
 
 
 def consultar_productos(repos: ReposDep, servicios: ServiciosDep) -> ConsultarProductos:
@@ -441,16 +586,19 @@ def desactivar_producto(repos: ReposDep, servicios: ServiciosDep) -> DesactivarP
 DesactivarProductoDep = Annotated[DesactivarProducto, Depends(desactivar_producto)]
 
 
-def gestionar_imagenes_producto(
-    repos: ReposDep,
-    servicios: ServiciosDep,
-) -> GestionarImagenesProducto:
-    return GestionarImagenesProducto(repos.imagenes, repos.productos, servicios.reloj)
+def eliminar_imagen_producto(repos: ReposDep) -> EliminarImagenProducto:
+    return EliminarImagenProducto(repos.imagenes)
 
 
-GestionarImagenesProductoDep = Annotated[
-    GestionarImagenesProducto, Depends(gestionar_imagenes_producto)
-]
+EliminarImagenProductoDep = Annotated[EliminarImagenProducto, Depends(eliminar_imagen_producto)]
+
+
+def subir_imagen_producto(repos: ReposDep, servicios: ServiciosDep) -> SubirImagenProducto:
+    return SubirImagenProducto(repos.imagenes, repos.productos, servicios.reloj)
+
+
+SubirImagenProductoDep = Annotated[SubirImagenProducto, Depends(subir_imagen_producto)]
+
 
 # ------------------------------ carrito ---------------------------------
 
@@ -481,6 +629,7 @@ def procesar_checkout(repos: ReposDep, servicios: ServiciosDep) -> ProcesarCheck
 
 
 ProcesarCheckoutDep = Annotated[ProcesarCheckout, Depends(procesar_checkout)]
+
 
 # ------------------------------ sistema ---------------------------------
 

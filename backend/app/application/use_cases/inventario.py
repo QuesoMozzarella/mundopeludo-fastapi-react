@@ -219,9 +219,22 @@ class DesactivarProducto:
         return self.productos.actualizar(producto)
 
 
-class GestionarImagenesProducto:
+class ConsultarImagenesProducto:
     """`ImagenProducto`: binarios guardados en la propia base, como en Django."""
 
+    def __init__(self, imagenes: ImagenProductoRepository, productos: ProductoRepository):
+        self.imagenes = imagenes
+        self.productos = productos
+
+    def listar(self, producto_id: int) -> list[ImagenProducto]:
+        _producto_o_error(self.productos, producto_id)
+        return self.imagenes.listar_por_producto(producto_id)
+
+    def obtener(self, imagen_id: int) -> ImagenProducto:
+        return _imagen_o_error(self.imagenes, imagen_id)
+
+
+class SubirImagenProducto:
     def __init__(
         self,
         imagenes: ImagenProductoRepository,
@@ -232,24 +245,14 @@ class GestionarImagenesProducto:
         self.productos = productos
         self.reloj = reloj
 
-    def listar(self, producto_id: int) -> list[ImagenProducto]:
-        self._producto(producto_id)
-        return self.imagenes.listar_por_producto(producto_id)
-
-    def obtener(self, imagen_id: int) -> ImagenProducto:
-        imagen = self.imagenes.obtener(imagen_id)
-        if imagen is None:
-            raise NotFoundError("Imagen de producto", imagen_id)
-        return imagen
-
-    def subir(
+    def ejecutar(
         self,
         producto_id: int,
         contenido: bytes,
         nombre_archivo: str | None = None,
         tipo_contenido: str = "image/jpeg",
     ) -> ImagenProducto:
-        self._producto(producto_id)
+        _producto_o_error(self.productos, producto_id)
         if not contenido:
             raise ValidationError("La imagen está vacía", "imagen_base64")
         if len(contenido) > MAX_BYTES_IMAGEN:
@@ -268,12 +271,25 @@ class GestionarImagenesProducto:
             )
         )
 
-    def eliminar(self, imagen_id: int) -> None:
-        self.obtener(imagen_id)
+
+class EliminarImagenProducto:
+    def __init__(self, imagenes: ImagenProductoRepository):
+        self.imagenes = imagenes
+
+    def ejecutar(self, imagen_id: int) -> None:
+        _imagen_o_error(self.imagenes, imagen_id)
         self.imagenes.eliminar(imagen_id)
 
-    def _producto(self, producto_id: int) -> Producto:
-        producto = self.productos.obtener(producto_id)
-        if producto is None:
-            raise NotFoundError("Producto", producto_id)
-        return producto
+
+def _producto_o_error(productos: ProductoRepository, producto_id: int) -> Producto:
+    producto = productos.obtener(producto_id)
+    if producto is None:
+        raise NotFoundError("Producto", producto_id)
+    return producto
+
+
+def _imagen_o_error(imagenes: ImagenProductoRepository, imagen_id: int) -> ImagenProducto:
+    imagen = imagenes.obtener(imagen_id)
+    if imagen is None:
+        raise NotFoundError("Imagen de producto", imagen_id)
+    return imagen
