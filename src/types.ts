@@ -13,6 +13,11 @@ export interface User {
   activo: number;
 }
 
+export interface Sesion {
+  token: string;
+  usuario: User;
+}
+
 export interface Especie {
   id: number;
   nombre: string;

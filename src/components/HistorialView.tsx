@@ -77,7 +77,8 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
       await onCreateHistorial({
         mascota_id: Number(mascotaId),
         cita_id: citaId ? Number(citaId) : null,
-        veterinario_id: currentUser.tipo === 'veterinario' ? currentUser.id : 2,
+        // Firma el veterinario de la sesión; si no lo es (admin), el backend toma el de la cita.
+        veterinario_id: currentUser.tipo === 'veterinario' ? currentUser.id : undefined,
         diagnostico: diagnostico.trim(),
         tratamiento: tratamiento.trim(),
         observaciones: observaciones.trim()

@@ -1,17 +1,25 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  User, 
-  Mascota, 
-  Especie, 
-  Servicio, 
-  Cita, 
-  Producto, 
-  HistorialMedico, 
-  SolicitudAdopcion, 
-  DashboardStats, 
-  CartItem 
+import {
+  User,
+  Mascota,
+  Especie,
+  Servicio,
+  Cita,
+  Producto,
+  HistorialMedico,
+  SolicitudAdopcion,
+  DashboardStats,
+  CartItem,
+  Sesion
 } from './types';
-import { apiService } from './api';
+import {
+  apiService,
+  alCaducarSesion,
+  ApiError,
+  fetchMe,
+  guardarSesion,
+  obtenerSesion
+} from './api';
 import { Navbar } from './components/Navbar';
 import { HomeView } from './components/HomeView';
 import { CitasView } from './components/CitasView';
@@ -22,48 +30,141 @@ import { HistorialView } from './components/HistorialView';
 import { InventarioView } from './components/InventarioView';
 import { DashboardView } from './components/DashboardView';
 import { CartModal } from './components/CartModal';
+import { LoginView } from './components/LoginView';
+import { Footer } from './components/Footer';
+import { InicioPublico } from './components/InicioPublico';
 import { AlertCircle, RefreshCw } from 'lucide-react';
-import {
-  INITIAL_USERS,
-  INITIAL_ESPECIES,
-  INITIAL_SERVICIOS,
-  INITIAL_MASCOTAS,
-  INITIAL_CITAS,
-  INITIAL_PRODUCTOS,
-  INITIAL_HISTORIALES,
-  INITIAL_SOLICITUDES,
-  INITIAL_STATS
-} from './data/seedData';
 
+const CLAVE_CARRITO = 'mundopeludo_cart';
+
+interface Destino {
+  tab: string;
+  context?: any;
+}
+
+/**
+ * Puerta de entrada: sin sesión sólo se ve la página de inicio pública; el
+ * resto de secciones pide iniciar sesión y, al entrar, abre la que se pidió.
+ */
 export function App() {
-  const [activeTab, setActiveTab] = useState<string>('inicio');
-  const [loading, setLoading] = useState<boolean>(false);
+  const [sesion, setSesion] = useState<Sesion | null>(() => obtenerSesion());
+  const [aviso, setAviso] = useState<string | null>(null);
+  const [pidiendoLogin, setPidiendoLogin] = useState(false);
+  const [destino, setDestino] = useState<Destino>({ tab: 'inicio' });
+
+  const cerrarSesion = (mensaje: string | null = null) => {
+    guardarSesion(null);
+    try {
+      // El carrito vive en el navegador: no debe pasar de un usuario a otro.
+      localStorage.removeItem(CLAVE_CARRITO);
+    } catch {
+      /* sin almacenamiento */
+    }
+    setAviso(mensaje);
+    setDestino({ tab: 'inicio' });
+    // Si caducó, se muestra el login con el aviso; si cerró sesión, el inicio.
+    setPidiendoLogin(mensaje !== null);
+    setSesion(null);
+  };
+
+  useEffect(() => {
+    alCaducarSesion(() => cerrarSesion('Tu sesión expiró. Vuelve a iniciar sesión.'));
+    return () => alCaducarSesion(null);
+  }, []);
+
+  // Una sesión guardada puede estar caducada o el usuario pudo cambiar de rol.
+  useEffect(() => {
+    if (!sesion) return;
+    fetchMe()
+      .then((usuario) => {
+        const actualizada = { ...sesion, usuario };
+        guardarSesion(actualizada);
+        setSesion(actualizada);
+      })
+      .catch((err) => {
+        if (err instanceof ApiError && err.status === 401) {
+          cerrarSesion('Tu sesión expiró. Vuelve a iniciar sesión.');
+        }
+      });
+    // Sólo al arrancar: después la sesión cambia por login/logout explícitos.
+  }, []);
+
+  if (!sesion && !pidiendoLogin) {
+    return (
+      <InicioPublico
+        onRequiereLogin={(tab, context) => {
+          setDestino({ tab, context });
+          setAviso(null);
+          setPidiendoLogin(true);
+        }}
+      />
+    );
+  }
+
+  if (!sesion) {
+    return (
+      <LoginView
+        aviso={aviso}
+        onVolver={() => {
+          setDestino({ tab: 'inicio' });
+          setPidiendoLogin(false);
+        }}
+        onSesionIniciada={(nueva) => {
+          guardarSesion(nueva);
+          setAviso(null);
+          setPidiendoLogin(false);
+          setSesion(nueva);
+        }}
+      />
+    );
+  }
+
+  return (
+    <Clinica
+      key={sesion.usuario.id}
+      currentUser={sesion.usuario}
+      destinoInicial={destino}
+      onCerrarSesion={() => cerrarSesion()}
+    />
+  );
+}
+
+interface ClinicaProps {
+  currentUser: User;
+  /** Sección que el usuario pidió antes de iniciar sesión. */
+  destinoInicial: Destino;
+  onCerrarSesion: () => void;
+}
+
+function Clinica({ currentUser, destinoInicial, onCerrarSesion }: ClinicaProps) {
+  const esPersonal = currentUser.tipo === 'veterinario' || currentUser.tipo === 'administrador';
+  const [activeTab, setActiveTab] = useState<string>(destinoInicial.tab);
+  const [loading, setLoading] = useState<boolean>(true);
   const [errorBanner, setErrorBanner] = useState<string | null>(null);
 
-  // User State
-  const [allUsers, setAllUsers] = useState<User[]>(INITIAL_USERS);
-  const [currentUser, setCurrentUser] = useState<User>(INITIAL_USERS[0]);
-
-  // Domain Entities
-  const [mascotas, setMascotas] = useState<Mascota[]>(INITIAL_MASCOTAS);
-  const [especies, setEspecies] = useState<Especie[]>(INITIAL_ESPECIES);
-  const [servicios, setServicios] = useState<Servicio[]>(INITIAL_SERVICIOS);
-  const [citas, setCitas] = useState<Cita[]>(INITIAL_CITAS);
-  const [adopciones, setAdopciones] = useState<Mascota[]>(() => INITIAL_MASCOTAS.filter(m => m.estado_adopcion === 'en_adopcion'));
-  const [solicitudes, setSolicitudes] = useState<SolicitudAdopcion[]>(INITIAL_SOLICITUDES);
-  const [productos, setProductos] = useState<Producto[]>(INITIAL_PRODUCTOS);
-  const [historiales, setHistoriales] = useState<HistorialMedico[]>(INITIAL_HISTORIALES);
-  const [stats, setStats] = useState<DashboardStats | null>(INITIAL_STATS);
+  // Domain Entities (sin datos de demostración: sólo lo que devuelve la API)
+  const [veterinarios, setVeterinarios] = useState<User[]>([]);
+  const [mascotas, setMascotas] = useState<Mascota[]>([]);
+  const [especies, setEspecies] = useState<Especie[]>([]);
+  const [servicios, setServicios] = useState<Servicio[]>([]);
+  const [citas, setCitas] = useState<Cita[]>([]);
+  const [adopciones, setAdopciones] = useState<Mascota[]>([]);
+  const [solicitudes, setSolicitudes] = useState<SolicitudAdopcion[]>([]);
+  const [productos, setProductos] = useState<Producto[]>([]);
+  const [historiales, setHistoriales] = useState<HistorialMedico[]>([]);
+  const [stats, setStats] = useState<DashboardStats | null>(null);
 
   // Modals & Navigation Context
   const [cartModalOpen, setCartModalOpen] = useState(false);
   const [selectedPetForHistorial, setSelectedPetForHistorial] = useState<Mascota | null>(null);
-  const [preselectedServicioId, setPreselectedServicioId] = useState<number | null>(null);
+  const [preselectedServicioId, setPreselectedServicioId] = useState<number | null>(
+    destinoInicial.context?.servicioId ?? null
+  );
 
   // Shopping Cart
   const [cartItems, setCartItems] = useState<CartItem[]>(() => {
     try {
-      const saved = localStorage.getItem('mundopeludo_cart');
+      const saved = localStorage.getItem(CLAVE_CARRITO);
       return saved ? JSON.parse(saved) : [];
     } catch {
       return [];
@@ -72,26 +173,41 @@ export function App() {
 
   useEffect(() => {
     try {
-      localStorage.setItem('mundopeludo_cart', JSON.stringify(cartItems));
+      localStorage.setItem(CLAVE_CARRITO, JSON.stringify(cartItems));
     } catch (e) {
       console.error(e);
     }
   }, [cartItems]);
 
-  // Load all initial data from FastAPI backend with automatic retry and graceful fallback
-  const loadData = async (showLoadingSpinner = false) => {
+  // El panel de indicadores es sólo para el personal: a un cliente la API le
+  // responde 403, así que ni se pide.
+  const refrescarStats = async () => {
+    if (!esPersonal) return;
     try {
-      if (showLoadingSpinner) {
-        setLoading(true);
-      }
-      setErrorBanner(null);
+      setStats(await apiService.getStats());
+    } catch (err) {
+      console.warn('No se pudieron cargar los indicadores:', err);
+    }
+  };
 
-      // Check health safely (does not throw thanks to fallback)
+  // La API ya filtra por usuario: un cliente recibe sólo sus mascotas, citas,
+  // historiales y solicitudes; el personal, todo.
+  const loadData = async (showLoadingSpinner = false) => {
+    if (showLoadingSpinner) setLoading(true);
+    setErrorBanner(null);
+    try {
       const health = await apiService.getHealth();
-      const isHealthy = health.status === 'ok';
+      if (health.status !== 'ok') {
+        setErrorBanner('No se pudo conectar con el backend de Mundo Peludo.');
+        return;
+      }
 
+      const intentar = <T,>(p: Promise<T>) => p.catch((err) => {
+        console.warn('Carga parcial:', err?.message || err);
+        return null;
+      });
       const [
-        usersData,
+        vetsData,
         especiesData,
         serviciosData,
         mascotasData,
@@ -99,57 +215,36 @@ export function App() {
         adopcionesData,
         solicitudesData,
         productosData,
-        historialesData,
-        statsData
+        historialesData
       ] = await Promise.all([
-        apiService.getUsuarios().catch(() => null),
-        apiService.getEspecies().catch(() => null),
-        apiService.getServicios().catch(() => null),
-        apiService.getMascotas().catch(() => null),
-        apiService.getCitas().catch(() => null),
-        apiService.getAdopciones().catch(() => null),
-        apiService.getSolicitudesAdopcion().catch(() => null),
-        apiService.getProductos().catch(() => null),
-        apiService.getHistoriales().catch(() => null),
-        apiService.getStats().catch(() => null)
+        intentar(apiService.getVeterinarios()),
+        intentar(apiService.getEspecies()),
+        intentar(apiService.getServicios()),
+        intentar(apiService.getMascotas()),
+        intentar(apiService.getCitas()),
+        intentar(apiService.getAdopciones()),
+        intentar(apiService.getSolicitudesAdopcion()),
+        intentar(apiService.getProductos()),
+        intentar(apiService.getHistoriales())
       ]);
 
-      if (usersData && usersData.length > 0) {
-        setAllUsers(usersData);
-        if (!usersData.some(u => u.id === currentUser.id)) {
-          setCurrentUser(usersData[0]);
-        }
-      }
-      if (especiesData && especiesData.length > 0) setEspecies(especiesData);
-      if (serviciosData && serviciosData.length > 0) setServicios(serviciosData);
-      if (mascotasData && mascotasData.length > 0) setMascotas(mascotasData);
-      if (citasData && citasData.length > 0) setCitas(citasData);
-      if (adopcionesData && adopcionesData.length > 0) setAdopciones(adopcionesData);
-      if (solicitudesData && solicitudesData.length > 0) setSolicitudes(solicitudesData);
-      if (productosData && productosData.length > 0) setProductos(productosData);
-      if (historialesData && historialesData.length > 0) setHistoriales(historialesData);
-      if (statsData) setStats(statsData);
-
-      if (isHealthy) {
-        setErrorBanner(null);
-      } else if (!usersData && !mascotasData) {
-        // Only show banner if neither health nor data could connect
-        setErrorBanner('Conectando con el backend FastAPI de Mundo Peludo...');
-      }
-    } catch (err: any) {
-      console.warn('Backend synchronization notice:', err?.message || err);
+      if (vetsData) setVeterinarios(vetsData);
+      if (especiesData) setEspecies(especiesData);
+      if (serviciosData) setServicios(serviciosData);
+      if (mascotasData) setMascotas(mascotasData);
+      if (citasData) setCitas(citasData);
+      if (adopcionesData) setAdopciones(adopcionesData);
+      if (solicitudesData) setSolicitudes(solicitudesData);
+      if (productosData) setProductos(productosData);
+      if (historialesData) setHistoriales(historialesData);
+      await refrescarStats();
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadData();
-    // Re-verify connection after 3 seconds in case backend was finishing cold start
-    const timer = setTimeout(() => {
-      loadData();
-    }, 3000);
-    return () => clearTimeout(timer);
+    loadData(true);
   }, []);
 
   // Cart operations
@@ -201,41 +296,29 @@ export function App() {
       metodo_pago: data.metodo_pago
     });
 
-    // Refresh products and stats
-    const [prods, s] = await Promise.all([
-      apiService.getProductos(),
-      apiService.getStats()
-    ]);
-    setProductos(prods);
-    setStats(s);
-
+    setProductos(await apiService.getProductos());
+    await refrescarStats();
     return res;
   };
 
   // Citas operations
   const handleBookCita = async (data: any) => {
     await apiService.createCita(data);
-    const updatedCitas = await apiService.getCitas();
-    setCitas(updatedCitas);
-    const updatedStats = await apiService.getStats();
-    setStats(updatedStats);
+    setCitas(await apiService.getCitas());
+    await refrescarStats();
   };
 
   const handleUpdateCitaEstado = async (id: number, estado: string) => {
     await apiService.updateCitaEstado(id, estado);
-    const updatedCitas = await apiService.getCitas();
-    setCitas(updatedCitas);
-    const updatedStats = await apiService.getStats();
-    setStats(updatedStats);
+    setCitas(await apiService.getCitas());
+    await refrescarStats();
   };
 
   // Mascotas operations
   const handleCreateMascota = async (data: Partial<Mascota>) => {
     await apiService.createMascota(data);
-    const updatedMascotas = await apiService.getMascotas();
-    setMascotas(updatedMascotas);
-    const updatedStats = await apiService.getStats();
-    setStats(updatedStats);
+    setMascotas(await apiService.getMascotas());
+    await refrescarStats();
   };
 
   // Adopciones operations
@@ -255,16 +338,15 @@ export function App() {
       revisor_id: revisorId,
       notas_revisor: notas
     });
-    const [sols, adops, mascs, s] = await Promise.all([
+    const [sols, adops, mascs] = await Promise.all([
       apiService.getSolicitudesAdopcion(),
       apiService.getAdopciones(),
-      apiService.getMascotas(),
-      apiService.getStats()
+      apiService.getMascotas()
     ]);
     setSolicitudes(sols);
     setAdopciones(adops);
     setMascotas(mascs);
-    setStats(s);
+    await refrescarStats();
   };
 
   const handleRechazarSolicitud = async (solicitudId: number, revisorId: number, notas?: string) => {
@@ -280,12 +362,10 @@ export function App() {
   // Historial operations
   const handleCreateHistorial = async (data: any) => {
     await apiService.createHistorial(data);
-    const updatedHists = await apiService.getHistoriales();
-    setHistoriales(updatedHists);
-
-    // If linked to an appointment, mark appointment completed
+    setHistoriales(await apiService.getHistoriales());
+    // Con cita, el backend ya la marca como Completada: sólo hay que refrescarla.
     if (data.cita_id) {
-      await handleUpdateCitaEstado(data.cita_id, 'Completada');
+      setCitas(await apiService.getCitas());
     }
   };
 
@@ -317,8 +397,6 @@ export function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const veterinarios = allUsers.filter(u => u.tipo === 'veterinario' || u.tipo === 'administrador');
-
   return (
     <div className="min-h-screen bg-[#f7fbfe] text-[#333333] flex flex-col antialiased">
       {/* Navbar */}
@@ -329,8 +407,7 @@ export function App() {
           window.scrollTo({ top: 0, behavior: 'smooth' });
         }}
         currentUser={currentUser}
-        onSwitchUser={setCurrentUser}
-        allUsers={allUsers}
+        onCerrarSesion={onCerrarSesion}
         cartCount={cartItems.reduce((acc, i) => acc + i.cantidad, 0)}
         onOpenCart={() => setCartModalOpen(true)}
       />
@@ -353,7 +430,7 @@ export function App() {
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {loading && mascotas.length === 0 ? (
+        {loading ? (
           <div className="flex flex-col items-center justify-center py-24 space-y-4">
             <RefreshCw className="w-10 h-10 text-[#1d95c8] animate-spin" />
             <h3 className="text-base font-bold text-[#156a8e]">Cargando datos de Mundo Peludo...</h3>
@@ -457,72 +534,7 @@ export function App() {
         )}
       </main>
 
-      {/* Footer (Legacy Primary Darker #1d4f60) */}
-      <footer className="bg-[#1d4f60] text-sky-100 text-xs border-t border-[#156a8e] py-10 px-4 mt-auto">
-        <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
-          <div>
-            <div className="flex items-center gap-2 mb-3">
-              <img 
-                src="/img/logo.jpg" 
-                alt="Logo Mundo Peludo" 
-                className="w-8 h-8 rounded-full border border-white/60 object-cover"
-                onError={(e) => {
-                  (e.currentTarget as HTMLElement).style.display = 'none';
-                }}
-              />
-              <span className="font-extrabold text-base text-white tracking-wide">Mundo Peludo</span>
-            </div>
-            <p className="text-sky-200/80 leading-relaxed text-xs">
-              Clínica veterinaria dedicada al cuidado integral, salud y felicidad de tus mascotas con atención profesional 24/7.
-            </p>
-          </div>
-
-          <div>
-            <h4 className="font-bold text-white uppercase tracking-wider text-[11px] mb-3">Contacto & Ubicación</h4>
-            <ul className="space-y-2 text-sky-200/90 text-xs">
-              <li>📍 Bello, Antioquia, Colombia</li>
-              <li>💬 WhatsApp: +57 3243806941</li>
-              <li>✉️ andres_ramirez23232@elpoli.edu.co</li>
-              <li>⏰ Urgencias: Atención Médica 24 Horas</li>
-            </ul>
-          </div>
-
-          <div>
-            <h4 className="font-bold text-white uppercase tracking-wider text-[11px] mb-3">Arquitectura Técnica</h4>
-            <p className="text-sky-200/80 leading-relaxed mb-3">
-              Nueva versión moderna desarrollada con FastAPI v2.0 (Python), Node.js Express y React + Tailwind.
-            </p>
-          </div>
-        </div>
-
-        <div className="max-w-7xl mx-auto pt-6 border-t border-[#156a8e]/60 flex flex-col sm:flex-row items-center justify-between gap-3 text-sky-200/60 text-[11px]">
-          <div>
-            © {new Date().getFullYear()} Mundo Peludo. Todos los derechos reservados.
-          </div>
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => setActiveTab('inicio')}
-              className="hover:text-white transition-colors"
-            >
-              Inicio
-            </button>
-            <span>•</span>
-            <button
-              onClick={() => setActiveTab('citas')}
-              className="hover:text-white transition-colors"
-            >
-              Agendar Cita
-            </button>
-            <span>•</span>
-            <button
-              onClick={() => setActiveTab('tienda')}
-              className="hover:text-white transition-colors"
-            >
-              Tienda
-            </button>
-          </div>
-        </div>
-      </footer>
+      <Footer onNavigate={handleNavigate} />
 
       {/* Cart Modal */}
       <CartModal

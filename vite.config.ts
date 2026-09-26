@@ -58,11 +58,13 @@ function fastApiPlugin(): Plugin {
     });
   };
 
-  checkAndStart();
-
   return {
     name: 'fastapi-runner',
+    // Sólo con el servidor de desarrollo: en `vite build` el proceso hijo de
+    // uvicorn mantenía vivo el build y nunca terminaba.
+    apply: 'serve',
     configureServer(server) {
+      checkAndStart();
       server.httpServer?.on('close', () => {
         if (fastApiProc) {
           console.log('[Vite] Terminating FastAPI backend...');
