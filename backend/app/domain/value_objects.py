@@ -164,9 +164,13 @@ def hora_local(momento: datetime) -> datetime:
     entra un "...Z" o un "-05:00" sin convertir, compararlo con `ahora()`
     lanza `TypeError`.
     """
-    if momento.tzinfo is not None:
+    if momento.tzinfo is None:
+        return momento
+    try:
         return momento.astimezone().replace(tzinfo=None)
-    return momento
+    except (OSError, OverflowError, ValueError):
+        # Windows no convierte fechas anteriores a 1970 a la zona local.
+        raise ValidationError("Fecha fuera del rango admitido", "fecha_hora") from None
 
 
 def dinero(valor, *, campo: str = "precio") -> Decimal:

@@ -5,7 +5,7 @@ import sqlite3
 from datetime import date, datetime, time
 from decimal import Decimal
 
-from ...domain.errors import ConflictError
+from ...domain.errors import ConflictError, ValidationError
 
 
 class RepositorioSQLite:
@@ -19,6 +19,9 @@ class RepositorioSQLite:
             return self.conexion.execute(sql, parametros)
         except sqlite3.IntegrityError as exc:
             raise ConflictError(_traducir_integridad(exc)) from exc
+        except OverflowError:
+            # SQLite guarda enteros de 64 bits; un id como 10**20 no cabe.
+            raise ValidationError("Número fuera del rango admitido") from None
 
     def _uno(self, sql: str, parametros: tuple = ()) -> sqlite3.Row | None:
         return self._ejecutar(sql, parametros).fetchone()

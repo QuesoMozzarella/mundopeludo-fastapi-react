@@ -87,7 +87,7 @@ class SolicitarAdopcion:
             raise NotFoundError("Usuario", cliente_id)
         if not cliente.es_cliente:
             raise ValidationError("Sólo un cliente puede solicitar una adopción", "cliente_id")
-        if mascota.estado_adopcion is not EstadoAdopcion.EN_ADOPCION:
+        if not mascota.disponible_para_adopcion:
             raise BusinessRuleError("La mascota no está disponible para adopción")
         if mascota.cliente_id == cliente_id:
             raise BusinessRuleError("La mascota ya pertenece a este cliente")

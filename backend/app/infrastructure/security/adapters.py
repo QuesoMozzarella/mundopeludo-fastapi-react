@@ -87,6 +87,10 @@ class JwtTokenService(TokenService):
         return f"{cabecera}.{cuerpo}.{firma}"
 
     def decodificar(self, token: str) -> dict:
+        # Un JWT sólo contiene base64url: cualquier otro carácter lo invalida
+        # (y `hmac.compare_digest` falla con texto no ASCII).
+        if not token.isascii():
+            raise AuthenticationError("Token malformado")
         try:
             cabecera, cuerpo, firma = token.split(".")
         except ValueError:

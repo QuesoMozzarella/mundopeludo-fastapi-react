@@ -6,12 +6,14 @@ COMMIT si el handler termina bien y ROLLBACK si lanza.
 from __future__ import annotations
 
 import sqlite3
+import threading
 from contextlib import contextmanager
 from datetime import date, datetime, time
 from decimal import Decimal
 from pathlib import Path
 from typing import Iterator
 
+from ...domain.errors import ServicioNoDisponibleError
 from .schema import DDL, SEMILLA_MINIMA, migrar
 
 # SQLite no sabe guardar estos tipos: se serializan en texto ISO / decimal.
@@ -29,6 +31,9 @@ class Database:
         if self.ruta != ":memory:":
             Path(self.ruta).parent.mkdir(parents=True, exist_ok=True)
         self._memoria: sqlite3.Connection | None = None
+        # La conexión ":memory:" es única y compartida: sus transacciones no
+        # pueden solaparse entre hilos.
+        self._cerrojo_memoria = threading.RLock()
 
     def conectar(self) -> sqlite3.Connection:
         if self.ruta == ":memory:":
@@ -43,8 +48,13 @@ class Database:
         # en su threadpool, y el __enter__, el handler y el __exit__ pueden caer
         # en hilos distintos. La conexión sigue perteneciendo a una sola
         # petición, así que no hay uso concurrente real.
+        # isolation_level=None: las transacciones las abre `unidad_de_trabajo`
+        # con BEGIN explícito. El modo implícito de sqlite3 sólo abría la
+        # transacción al primer INSERT/UPDATE, así que las lecturas previas
+        # (p. ej. el stock) quedaban fuera y dos compras simultáneas podían
+        # vender la misma última unidad.
         conn = sqlite3.connect(
-            self.ruta, isolation_level="DEFERRED", check_same_thread=False
+            self.ruta, isolation_level=None, check_same_thread=False, timeout=10
         )
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
@@ -52,10 +62,26 @@ class Database:
         return conn
 
     @contextmanager
-    def unidad_de_trabajo(self) -> Iterator[sqlite3.Connection]:
-        """Transacción explícita: commit al salir bien, rollback ante error."""
+    def unidad_de_trabajo(self, escritura: bool = True) -> Iterator[sqlite3.Connection]:
+        """Transacción explícita: commit al salir bien, rollback ante error.
+
+        Con `escritura`, BEGIN IMMEDIATE toma el cerrojo de escritura desde la
+        primera lectura: las peticiones que modifican datos se serializan y
+        leer-calcular-escribir es atómico. Las de sólo lectura usan BEGIN
+        normal y, gracias a WAL, no esperan a nadie.
+        """
+        memoria = self.ruta == ":memory:"
+        if memoria:
+            self._cerrojo_memoria.acquire()
         conn = self.conectar()
         try:
+            try:
+                conn.execute("BEGIN IMMEDIATE" if escritura else "BEGIN")
+            except sqlite3.OperationalError as exc:
+                # Otro escritor retuvo el cerrojo más que el `timeout`.
+                raise ServicioNoDisponibleError(
+                    "La base de datos está ocupada; intenta de nuevo en unos segundos"
+                ) from exc
             yield conn
             conn.commit()
         except BaseException as exc:
@@ -69,7 +95,9 @@ class Database:
                 conn.rollback()
             raise
         finally:
-            if self.ruta != ":memory:":
+            if memoria:
+                self._cerrojo_memoria.release()
+            else:
                 conn.close()
 
     def crear_esquema(self) -> None:

@@ -1,7 +1,12 @@
 """Casos de uso de historiales médicos."""
 from __future__ import annotations
 
-from ...domain.errors import ConflictError, NotFoundError, ValidationError
+from ...domain.errors import (
+    BusinessRuleError,
+    ConflictError,
+    NotFoundError,
+    ValidationError,
+)
 from ...domain.model.cita import Cita
 from ...domain.model.historial import HistorialMedico
 from ...domain.ports.repositories import (
@@ -117,8 +122,13 @@ class RegistrarHistorial:
             return cita.mascota_id
         if not mascota_id:
             raise ValidationError("Indica la cita o la mascota del historial", "mascota_id")
-        if self.mascotas.obtener(mascota_id) is None:
+        mascota = self.mascotas.obtener(mascota_id)
+        if mascota is None:
             raise NotFoundError("Mascota", mascota_id)
+        # Con cita se puede cerrar una consulta ya agendada aunque la mascota
+        # se diera de baja después; sin cita, no se abren fichas nuevas.
+        if not mascota.activo:
+            raise BusinessRuleError(f"{mascota.nombre} está dada de baja")
         return mascota_id
 
     def _veterinario(self, veterinario_id: int | None, cita: Cita | None) -> int:

@@ -6,6 +6,7 @@ from ...domain.model.inventario import ImagenProducto, Producto
 from ...domain.ports.repositories import ImagenProductoRepository, ProductoRepository
 from ...domain.ports.services import Clock
 from ...domain.value_objects import TipoAnimal
+from ..cambios import valor
 from ..read_models import ProductoVista
 
 MAX_BYTES_IMAGEN = 5 * 1024 * 1024
@@ -113,10 +114,10 @@ class ActualizarProducto:
             descripcion=cambios.get("descripcion", actual.descripcion),
             categoria=cambios.get("categoria") or actual.categoria,
             marca=cambios.get("marca", actual.marca),
-            precio=cambios.get("precio", actual.precio),
-            descuento_porcentaje=cambios.get("descuento_porcentaje", actual.descuento_porcentaje),
-            stock=cambios.get("stock", actual.stock),
-            stock_minimo=cambios.get("stock_minimo", actual.stock_minimo),
+            precio=valor(cambios, "precio", actual.precio),
+            descuento_porcentaje=valor(cambios, "descuento_porcentaje", actual.descuento_porcentaje),
+            stock=valor(cambios, "stock", actual.stock),
+            stock_minimo=valor(cambios, "stock_minimo", actual.stock_minimo),
             total_vendidos=actual.total_vendidos,
             tipo_animal=cambios.get("tipo_animal") or actual.tipo_animal,
             unidad_medida=cambios.get("unidad_medida") or actual.unidad_medida,
@@ -124,9 +125,9 @@ class ActualizarProducto:
             lote=cambios.get("lote", actual.lote),
             fecha_vencimiento=cambios.get("fecha_vencimiento", actual.fecha_vencimiento),
             sku=actual.sku,
-            disponible_online=cambios.get("disponible_online", actual.disponible_online),
+            disponible_online=valor(cambios, "disponible_online", actual.disponible_online),
             palabras_clave=cambios.get("palabras_clave", actual.palabras_clave),
-            activo=cambios.get("activo", actual.activo),
+            activo=valor(cambios, "activo", actual.activo),
             fecha_creacion=actual.fecha_creacion,
         )
         # El SKU deriva de nombre + categoría: sólo se recalcula si cambian.

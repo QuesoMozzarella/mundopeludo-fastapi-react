@@ -10,6 +10,7 @@ from ...domain.ports.repositories import (
 )
 from ...domain.ports.services import Clock
 from ...domain.value_objects import EstadoAdopcion
+from ..cambios import valor
 from ..read_models import MascotaVista
 
 
@@ -162,7 +163,7 @@ class ActualizarMascota:
         if actual is None:
             raise NotFoundError("Mascota", mascota_id)
 
-        especie_id = cambios.get("especie_id", actual.especie_id)
+        especie_id = valor(cambios, "especie_id", actual.especie_id)
         if especie_id != actual.especie_id and self.especies.obtener(especie_id) is None:
             raise NotFoundError("Especie", especie_id)
 
@@ -181,14 +182,14 @@ class ActualizarMascota:
             especie_id=especie_id,
             nombre=cambios.get("nombre") or actual.nombre,
             raza=cambios.get("raza", actual.raza),
-            edad_anos=cambios.get("edad_anos", actual.edad_anos),
+            edad_anos=valor(cambios, "edad_anos", actual.edad_anos),
             sexo=cambios.get("sexo") or actual.sexo,
             color=cambios.get("color") or actual.color,
-            peso=cambios.get("peso", actual.peso),
-            esta_esterilizado=cambios.get("esta_esterilizado", actual.esta_esterilizado),
-            activo=cambios.get("activo", actual.activo),
+            peso=valor(cambios, "peso", actual.peso),
+            esta_esterilizado=valor(cambios, "esta_esterilizado", actual.esta_esterilizado),
+            activo=valor(cambios, "activo", actual.activo),
             fecha_registro=actual.fecha_registro,
-            estado_adopcion=cambios.get("estado_adopcion", actual.estado_adopcion),
+            estado_adopcion=valor(cambios, "estado_adopcion", actual.estado_adopcion),
         )
         return self.mascotas.actualizar(actualizada)
 

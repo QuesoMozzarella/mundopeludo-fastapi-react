@@ -1029,6 +1029,118 @@ def test_crear_superusuario_por_consola():
     assert cli.get("/api/users", headers=sesion).status == 200
 
 
+def test_null_en_actualizacion_no_borra_datos():
+    cli = nuevo_cliente()
+    producto = cli.post(
+        "/api/productos",
+        {"nombre": "Arena Gato", "categoria": "higiene", "precio": 12, "stock": 8,
+         "descuento_porcentaje": 10},
+    ).json()
+    r = cli.put(
+        f"/api/productos/{producto['id']}",
+        {"precio": None, "descuento_porcentaje": None, "stock": None, "disponible_online": None,
+         "activo": None},
+    )
+    assert r.status == 200, r
+    assert r.json()["precio"] == 12.0 and r.json()["stock"] == 8, r.json()
+
+    usuario = _crear(cli, "nulos@test.com")
+    r = cli.put(f"/api/users/{usuario['id']}", {"is_active": None, "nombre": None})
+    assert r.status == 200 and r.json()["activo"] is True, r
+
+    especie = cli.get("/api/especies").json()[0]
+    mascota = cli.post(
+        "/api/mascotas",
+        {"especie_id": especie["id"], "nombre": "Nieve", "sexo": "Hembra", "color": "blanco",
+         "peso": 6, "edad_anos": 3},
+    ).json()
+    r = cli.put(f"/api/mascotas/{mascota['id']}", {"peso": None, "edad_anos": None, "activo": None})
+    assert r.status == 200 and r.json()["peso"] == 6 and r.json()["edad_anos"] == 3, r
+
+
+def test_entradas_fuera_de_rango_no_dan_500():
+    cli = nuevo_cliente()
+    enorme = 10**20
+    assert cli.get(f"/api/mascotas/{enorme}").status in (404, 422)
+    assert cli.get("/api/mascotas", params={"cliente_id": str(enorme)}).status == 422
+    assert cli.get("/api/citas", params={"desde": "-1"}).status == 422
+    for token in ("ñññ.b.c", "a.ñ.c", "a" * 5000):
+        r = cli.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
+        assert r.status == 401, (token[:10], r)
+
+
+def test_checkout_concurrente_no_sobrevende():
+    import threading
+
+    cli = nuevo_cliente()
+    producto = cli.post(
+        "/api/productos", {"nombre": "Última Pelota", "categoria": "juguete", "precio": 4, "stock": 1}
+    ).json()
+    compradores = [_crear(cli, f"prisa{i}@test.com")["id"] for i in range(8)]
+    barrera = threading.Barrier(len(compradores))
+    estados = []
+
+    def comprar(usuario_id):
+        barrera.wait()
+        r = cli.post(
+            "/api/checkout",
+            {"usuario_id": usuario_id, "items": [{"producto_id": producto["id"], "cantidad": 1}]},
+        )
+        estados.append(r.status)
+
+    hilos = [threading.Thread(target=comprar, args=(u,)) for u in compradores]
+    for hilo in hilos:
+        hilo.start()
+    for hilo in hilos:
+        hilo.join()
+
+    assert sorted(estados) == [201] + [409] * (len(compradores) - 1), estados
+    assert cli.get(f"/api/productos/{producto['id']}").json()["stock"] == 0
+    assert len(cli.get("/api/pedidos").json()) == 1
+
+
+def test_bajas_bloquean_nuevas_operaciones():
+    cli = nuevo_cliente()
+    vet = _crear(cli, "baja-vet@test.com", "veterinario")
+    tutor = _crear(cli, "baja-tutor@test.com")
+    especie = cli.get("/api/especies").json()[0]
+    servicio = cli.post(
+        "/api/servicios", {"nombre": "Chequeo", "descripcion": "x", "veterinarios_ids": [vet["id"]]}
+    ).json()
+    mascota = cli.post(
+        "/api/mascotas",
+        {"cliente_id": tutor["id"], "especie_id": especie["id"], "nombre": "Coco",
+         "sexo": "Macho", "color": "marrón"},
+    ).json()
+    manana = (datetime.now() + timedelta(days=1)).replace(hour=10, minute=0, second=0, microsecond=0)
+    cita = {"mascota_id": mascota["id"], "veterinario_id": vet["id"], "servicio_id": servicio["id"],
+            "fecha_hora": manana.isoformat(), "motivo": "Chequeo general"}
+
+    cli.delete(f"/api/mascotas/{mascota['id']}")
+    assert cli.post("/api/citas", cita).status == 409
+    ficha = {"mascota_id": mascota["id"], "veterinario_id": vet["id"],
+             "diagnostico": "Sano", "tratamiento": "Ninguno"}
+    assert cli.post("/api/historiales-medicos", ficha).status == 409
+
+    otra = cli.post(
+        "/api/mascotas",
+        {"cliente_id": tutor["id"], "especie_id": especie["id"], "nombre": "Luna",
+         "sexo": "Hembra", "color": "gris"},
+    ).json()
+    cli.delete(f"/api/users/{vet['id']}")
+    assert cli.post("/api/citas", {**cita, "mascota_id": otra["id"]}).status == 409
+
+    refugio = cli.post(
+        "/api/mascotas", {"especie_id": especie["id"], "nombre": "Sol", "sexo": "Macho", "color": "negro"}
+    ).json()
+    cli.put(f"/api/adopciones/mascotas/{refugio['id']}/publicar")
+    cli.delete(f"/api/mascotas/{refugio['id']}")
+    solicitud = cli.post(
+        "/api/adopciones/solicitudes", {"mascota_id": refugio["id"], "cliente_id": tutor["id"]}
+    )
+    assert solicitud.status == 409, solicitud
+
+
 def _ejecutar_todo() -> int:
     pruebas = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     fallos = 0

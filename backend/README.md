@@ -205,6 +205,17 @@ Por eso el checkout es atómico: si el tercer producto del carrito no tiene
 stock, tampoco se descuenta el de los dos primeros (hay una prueba que lo
 comprueba, `test_checkout_es_transaccional`).
 
+Las peticiones que escriben (POST, PUT, DELETE) abren la transacción con
+`BEGIN IMMEDIATE`, que toma el cerrojo de escritura antes de la primera
+lectura: dos compras simultáneas de la última unidad no pueden leer el mismo
+stock (`test_checkout_concurrente_no_sobrevende`). Las de sólo lectura usan
+`BEGIN` y, con WAL, no esperan a nadie. Si el cerrojo tarda más de 10 s, la
+API responde 503.
+
+En las actualizaciones parciales, un `null` explícito en un campo obligatorio
+(precio, stock, activo...) significa "sin cambio"; sólo los campos opcionales
+(descripción, notas, teléfono...) se vacían con `null`.
+
 La excepción son los errores marcados con `conservar_cambios`
 (`IntentoFallidoError`): confirman lo escrito antes de fallar. Así un código de
 recuperación erróneo suma un intento aunque la petición se rechace, y tras 5

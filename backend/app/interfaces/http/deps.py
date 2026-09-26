@@ -194,10 +194,14 @@ def obtener_servicios(request: Request) -> Servicios:
     return obtener_contenedor(request).servicios
 
 
+METODOS_DE_LECTURA = {"GET", "HEAD", "OPTIONS"}
+
+
 def obtener_repos(request: Request) -> Iterator[Repositorios]:
     """Una conexión por petición: commit al terminar bien, rollback si falla."""
     contenedor = obtener_contenedor(request)
-    with contenedor.db.unidad_de_trabajo() as conexion:
+    escritura = request.method not in METODOS_DE_LECTURA
+    with contenedor.db.unidad_de_trabajo(escritura) as conexion:
         yield contenedor.repositorios(conexion)
 
 

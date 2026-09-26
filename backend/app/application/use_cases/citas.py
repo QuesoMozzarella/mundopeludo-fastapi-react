@@ -18,6 +18,7 @@ from ...domain.ports.repositories import (
 )
 from ...domain.ports.services import Clock
 from ...domain.value_objects import hora_local
+from ..cambios import valor
 from ..read_models import CitaVista, DisponibilidadVista, ServicioVista
 
 MINUTOS_ENTRE_CITAS = 30
@@ -49,7 +50,7 @@ class GestionarEstadosCita:
                 id=actual.id,
                 nombre=cambios.get("nombre") or actual.nombre,
                 descripcion=cambios.get("descripcion", actual.descripcion),
-                orden=cambios.get("orden", actual.orden),
+                orden=valor(cambios, "orden", actual.orden),
             )
         )
 
@@ -97,7 +98,7 @@ class GestionarServicios:
             id=actual.id,
             nombre=cambios.get("nombre") or actual.nombre,
             descripcion=cambios.get("descripcion", actual.descripcion),
-            activo=cambios.get("activo", actual.activo),
+            activo=valor(cambios, "activo", actual.activo),
             veterinarios_ids=(
                 self._validar_veterinarios(veterinarios)
                 if veterinarios is not None
@@ -289,6 +290,8 @@ class ReglasDeAgenda:
             raise NotFoundError("Usuario", veterinario_id)
         if not veterinario.es_veterinario:
             raise ValidationError("El profesional indicado no es veterinario", "veterinario_id")
+        if not veterinario.is_active:
+            raise BusinessRuleError(f"{veterinario.nombre_completo} ya no atiende en la clínica")
         return veterinario
 
     def servicio(self, servicio_id: int, veterinario: Usuario) -> Servicio:
@@ -356,6 +359,8 @@ class AgendarCita:
         mascota = self.mascotas.obtener(datos.get("mascota_id"))
         if mascota is None:
             raise NotFoundError("Mascota", datos.get("mascota_id"))
+        if not mascota.activo:
+            raise BusinessRuleError(f"{mascota.nombre} está dada de baja")
 
         veterinario = self.reglas.veterinario(datos.get("veterinario_id"))
         servicio = self.reglas.servicio(datos.get("servicio_id"), veterinario)
@@ -403,7 +408,7 @@ class ActualizarCita:
             estado_id=estado_id,
             servicio_id=cambios.get("servicio_id") or actual.servicio_id,
             fecha_hora=cambios.get("fecha_hora") or actual.fecha_hora,
-            peso=cambios.get("peso", actual.peso),
+            peso=valor(cambios, "peso", actual.peso),
             motivo=cambios.get("motivo") or actual.motivo,
             notas=cambios.get("notas", actual.notas),
         )

@@ -138,8 +138,12 @@ class AutenticarUsuario:
 
     def ejecutar(self, email: str, password: str) -> SesionIniciada:
         usuario = self.usuarios.obtener_por_email(email)
-        if usuario is None or not self.hasher.verificar(password, usuario.password_hash):
-            # Mismo mensaje en ambos casos: no revelamos si el correo existe.
+        if usuario is None:
+            # Mismo mensaje y mismo coste que una contraseña errónea: ni el
+            # texto ni el tiempo de respuesta revelan si el correo existe.
+            self.hasher.verificar(password, self._hash_senuelo())
+            raise AuthenticationError("Correo o contraseña incorrectos")
+        if not self.hasher.verificar(password, usuario.password_hash):
             raise AuthenticationError("Correo o contraseña incorrectos")
         if not usuario.is_active:
             raise AuthenticationError("La cuenta está desactivada")
@@ -162,6 +166,14 @@ class AutenticarUsuario:
         return SesionIniciada(
             usuario=usuario, token=token, expira_en_minutos=self.tokens.minutos_vigencia
         )
+
+
+    _senuelo: str | None = None
+
+    def _hash_senuelo(self) -> str:
+        if AutenticarUsuario._senuelo is None:
+            AutenticarUsuario._senuelo = self.hasher.hash("senuelo-sin-cuenta")
+        return AutenticarUsuario._senuelo
 
 
 class ObtenerUsuarioDesdeToken:

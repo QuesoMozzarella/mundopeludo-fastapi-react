@@ -59,10 +59,13 @@ def create_app(configuracion: Config | None = None) -> FastAPI:
     )
     instalar_contenedor(app, contenedor)
 
+    origenes = contenedor.config.origenes_cors or ["*"]
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=contenedor.config.origenes_cors or ["*"],
-        allow_credentials=True,
+        allow_origins=origenes,
+        # La sesión va en la cabecera Authorization, no en cookies. Con "*" y
+        # credenciales, Starlette reflejaría cualquier origen como permitido.
+        allow_credentials="*" not in origenes,
         allow_methods=["*"],
         allow_headers=["*"],
     )

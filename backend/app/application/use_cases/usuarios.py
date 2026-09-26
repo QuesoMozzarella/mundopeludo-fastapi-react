@@ -11,6 +11,7 @@ from ...domain.ports.repositories import (
 )
 from ...domain.ports.services import Clock
 from ...domain.value_objects import TipoUsuario
+from ..cambios import valor
 from ..read_models import UsuarioVista
 
 
@@ -90,8 +91,9 @@ class ActualizarUsuario:
             direccion=cambios.get("direccion", usuario.direccion),
             tipo=cambios.get("tipo") or usuario.tipo,
             password_hash=usuario.password_hash,
-            is_active=cambios.get("is_active", usuario.is_active),
-            is_staff=usuario.is_staff,
+            is_active=valor(cambios, "is_active", usuario.is_active),
+            # Si cambia el rol, `Usuario.__post_init__` decide is_staff de nuevo.
+            is_staff=usuario.is_staff if not cambios.get("tipo") else False,
             is_superuser=usuario.is_superuser,
             date_joined=usuario.date_joined,
             last_login=usuario.last_login,
@@ -222,7 +224,7 @@ class GestionarEspecialidades:
             codigo=cambios.get("codigo") or actual.codigo,
             nombre=cambios.get("nombre") or actual.nombre,
             descripcion=cambios.get("descripcion", actual.descripcion),
-            activa=cambios.get("activa", actual.activa),
+            activa=valor(cambios, "activa", actual.activa),
         )
         duplicada = self.especialidades.obtener_por_codigo(nueva.codigo)
         if duplicada and duplicada.id != actual.id:
