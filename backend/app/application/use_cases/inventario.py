@@ -1,12 +1,16 @@
 """Casos de uso de inventario: productos e imágenes."""
 from __future__ import annotations
 
+from dataclasses import dataclass
+from datetime import date
+from decimal import Decimal
+
 from ...domain.errors import NotFoundError, ValidationError
 from ...domain.model.inventario import ImagenProducto, Producto
 from ...domain.ports.repositories import ImagenProductoRepository, ProductoRepository
 from ...domain.ports.services import Clock
 from ...domain.value_objects import TipoAnimal
-from ..cambios import valor
+from ..cambios import SIN_CAMBIO, Cambio, nuevo, nuevo_o_vacio
 from ..read_models import ProductoVista
 
 MAX_BYTES_IMAGEN = 5 * 1024 * 1024
@@ -72,31 +76,71 @@ class ConsultarProductos:
         )
 
 
+@dataclass(frozen=True, kw_only=True)
+class CrearProductoCmd:
+    nombre: str
+    categoria: str
+    precio: Decimal
+    descripcion: str | None = None
+    marca: str | None = None
+    descuento_porcentaje: Decimal = Decimal("0")
+    stock: int = 0
+    stock_minimo: int = 5
+    tipo_animal: str = "todos"
+    unidad_medida: str = "unidad"
+    peso: Decimal | None = None
+    lote: str | None = None
+    fecha_vencimiento: date | None = None
+    disponible_online: bool = True
+    palabras_clave: str | None = None
+    activo: bool = True
+
+
+@dataclass(frozen=True, kw_only=True)
+class ActualizarProductoCmd:
+    nombre: Cambio[str | None] = SIN_CAMBIO
+    categoria: Cambio[str | None] = SIN_CAMBIO
+    precio: Cambio[Decimal | None] = SIN_CAMBIO
+    descripcion: Cambio[str | None] = SIN_CAMBIO
+    marca: Cambio[str | None] = SIN_CAMBIO
+    descuento_porcentaje: Cambio[Decimal | None] = SIN_CAMBIO
+    stock: Cambio[int | None] = SIN_CAMBIO
+    stock_minimo: Cambio[int | None] = SIN_CAMBIO
+    tipo_animal: Cambio[str | None] = SIN_CAMBIO
+    unidad_medida: Cambio[str | None] = SIN_CAMBIO
+    peso: Cambio[Decimal | None] = SIN_CAMBIO
+    lote: Cambio[str | None] = SIN_CAMBIO
+    fecha_vencimiento: Cambio[date | None] = SIN_CAMBIO
+    disponible_online: Cambio[bool | None] = SIN_CAMBIO
+    palabras_clave: Cambio[str | None] = SIN_CAMBIO
+    activo: Cambio[bool | None] = SIN_CAMBIO
+
+
 class CrearProducto:
     def __init__(self, productos: ProductoRepository, sku: GeneradorSku, reloj: Clock):
         self.productos = productos
         self.sku = sku
         self.reloj = reloj
 
-    def ejecutar(self, datos: dict) -> Producto:
+    def ejecutar(self, cmd: CrearProductoCmd) -> Producto:
         ahora = self.reloj.ahora()
         producto = Producto(
-            nombre=datos.get("nombre"),
-            descripcion=datos.get("descripcion"),
-            categoria=datos.get("categoria"),
-            marca=datos.get("marca"),
-            precio=datos.get("precio"),
-            descuento_porcentaje=datos.get("descuento_porcentaje") or 0,
-            stock=datos.get("stock", 0),
-            stock_minimo=datos.get("stock_minimo", 5),
-            tipo_animal=datos.get("tipo_animal") or "todos",
-            unidad_medida=datos.get("unidad_medida") or "unidad",
-            peso=datos.get("peso"),
-            lote=datos.get("lote"),
-            fecha_vencimiento=datos.get("fecha_vencimiento"),
-            disponible_online=datos.get("disponible_online", True),
-            palabras_clave=datos.get("palabras_clave"),
-            activo=datos.get("activo", True),
+            nombre=cmd.nombre,
+            descripcion=cmd.descripcion,
+            categoria=cmd.categoria,
+            marca=cmd.marca,
+            precio=cmd.precio,
+            descuento_porcentaje=cmd.descuento_porcentaje,
+            stock=cmd.stock,
+            stock_minimo=cmd.stock_minimo,
+            tipo_animal=cmd.tipo_animal,
+            unidad_medida=cmd.unidad_medida,
+            peso=cmd.peso,
+            lote=cmd.lote,
+            fecha_vencimiento=cmd.fecha_vencimiento,
+            disponible_online=cmd.disponible_online,
+            palabras_clave=cmd.palabras_clave,
+            activo=cmd.activo,
             fecha_creacion=ahora,
             fecha_actualizacion=ahora,
         )
@@ -110,31 +154,31 @@ class ActualizarProducto:
         self.sku = sku
         self.reloj = reloj
 
-    def ejecutar(self, producto_id: int, cambios: dict) -> Producto:
+    def ejecutar(self, producto_id: int, cmd: ActualizarProductoCmd) -> Producto:
         actual = self.productos.obtener(producto_id)
         if actual is None:
             raise NotFoundError("Producto", producto_id)
 
         actualizado = Producto(
             id=actual.id,
-            nombre=cambios.get("nombre") or actual.nombre,
-            descripcion=cambios.get("descripcion", actual.descripcion),
-            categoria=cambios.get("categoria") or actual.categoria,
-            marca=cambios.get("marca", actual.marca),
-            precio=valor(cambios, "precio", actual.precio),
-            descuento_porcentaje=valor(cambios, "descuento_porcentaje", actual.descuento_porcentaje),
-            stock=valor(cambios, "stock", actual.stock),
-            stock_minimo=valor(cambios, "stock_minimo", actual.stock_minimo),
+            nombre=nuevo(cmd.nombre, actual.nombre),
+            descripcion=nuevo_o_vacio(cmd.descripcion, actual.descripcion),
+            categoria=nuevo(cmd.categoria, actual.categoria),
+            marca=nuevo_o_vacio(cmd.marca, actual.marca),
+            precio=nuevo(cmd.precio, actual.precio),
+            descuento_porcentaje=nuevo(cmd.descuento_porcentaje, actual.descuento_porcentaje),
+            stock=nuevo(cmd.stock, actual.stock),
+            stock_minimo=nuevo(cmd.stock_minimo, actual.stock_minimo),
             total_vendidos=actual.total_vendidos,
-            tipo_animal=cambios.get("tipo_animal") or actual.tipo_animal,
-            unidad_medida=cambios.get("unidad_medida") or actual.unidad_medida,
-            peso=cambios.get("peso", actual.peso),
-            lote=cambios.get("lote", actual.lote),
-            fecha_vencimiento=cambios.get("fecha_vencimiento", actual.fecha_vencimiento),
+            tipo_animal=nuevo(cmd.tipo_animal, actual.tipo_animal),
+            unidad_medida=nuevo(cmd.unidad_medida, actual.unidad_medida),
+            peso=nuevo_o_vacio(cmd.peso, actual.peso),
+            lote=nuevo_o_vacio(cmd.lote, actual.lote),
+            fecha_vencimiento=nuevo_o_vacio(cmd.fecha_vencimiento, actual.fecha_vencimiento),
             sku=actual.sku,
-            disponible_online=valor(cambios, "disponible_online", actual.disponible_online),
-            palabras_clave=cambios.get("palabras_clave", actual.palabras_clave),
-            activo=valor(cambios, "activo", actual.activo),
+            disponible_online=nuevo(cmd.disponible_online, actual.disponible_online),
+            palabras_clave=nuevo_o_vacio(cmd.palabras_clave, actual.palabras_clave),
+            activo=nuevo(cmd.activo, actual.activo),
             fecha_creacion=actual.fecha_creacion,
             fecha_actualizacion=self.reloj.ahora(),
         )

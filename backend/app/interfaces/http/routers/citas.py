@@ -5,6 +5,12 @@ from datetime import date, datetime
 
 from fastapi import APIRouter, Query, status
 
+from ....application.use_cases.citas import (
+    ActualizarCitaCmd,
+    ActualizarServicioCmd,
+    AgendarCitaCmd,
+    CrearServicioCmd,
+)
 from ..casos import (
     ActualizarCitaDep,
     AgendarCitaDep,
@@ -81,7 +87,7 @@ def obtener_servicio(servicio_id: int, caso: GestionarServiciosDep) -> ServicioO
     dependencies=[SoloAdmin],
 )
 def crear_servicio(datos: ServicioIn, caso: GestionarServiciosDep) -> ServicioOut:
-    return ServicioOut.desde(caso.crear(datos.model_dump()))
+    return ServicioOut.desde(caso.crear(CrearServicioCmd(**datos.model_dump())))
 
 
 @router.put(
@@ -93,7 +99,8 @@ def crear_servicio(datos: ServicioIn, caso: GestionarServiciosDep) -> ServicioOu
 def actualizar_servicio(
     servicio_id: int, datos: ServicioActualizarIn, caso: GestionarServiciosDep
 ) -> ServicioOut:
-    return ServicioOut.desde(caso.actualizar(servicio_id, datos.model_dump(exclude_unset=True)))
+    cmd = ActualizarServicioCmd(**datos.model_dump(exclude_unset=True))
+    return ServicioOut.desde(caso.actualizar(servicio_id, cmd))
 
 
 @router.delete(
@@ -197,7 +204,7 @@ def crear_cita(
     acceso: AccesoDep,
 ) -> CitaOut:
     acceso.propietario(mascotas.obtener(datos.mascota_id).mascota.cliente_id)
-    cita = caso.ejecutar(datos.model_dump())
+    cita = caso.ejecutar(AgendarCitaCmd(**datos.model_dump()))
     return CitaOut.desde(consulta.obtener(cita.id))
 
 
@@ -210,7 +217,7 @@ def actualizar_cita(
     acceso: AccesoDep,
 ) -> CitaOut:
     acceso.propietario(consulta.obtener(cita_id).cliente_id)
-    caso.ejecutar(cita_id, datos.model_dump(exclude_unset=True))
+    caso.ejecutar(cita_id, ActualizarCitaCmd(**datos.model_dump(exclude_unset=True)))
     return CitaOut.desde(consulta.obtener(cita_id))
 
 

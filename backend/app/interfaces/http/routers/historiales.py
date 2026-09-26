@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, status
 
+from ....application.use_cases.historiales import ActualizarHistorialCmd, RegistrarHistorialCmd
 from ..casos import ActualizarHistorialDep, ConsultarHistorialesDep, RegistrarHistorialDep
 from ..deps import AccesoDep, SoloPersonal
 from ..schemas.citas import HistorialActualizarIn, HistorialIn, HistorialOut
@@ -62,7 +63,7 @@ def crear(
     if datos.veterinario_id is not None:
         # Quien firma la ficha es el veterinario de la sesión (o un admin).
         acceso.propietario(datos.veterinario_id, personal=False)
-    historial = caso.ejecutar(datos.model_dump())
+    historial = caso.ejecutar(RegistrarHistorialCmd(**datos.model_dump()))
     return HistorialOut.desde(consulta.obtener(historial.id))
 
 
@@ -78,7 +79,7 @@ def actualizar(
     caso: ActualizarHistorialDep,
     consulta: ConsultarHistorialesDep,
 ) -> HistorialOut:
-    caso.ejecutar(historial_id, datos.model_dump(exclude_unset=True))
+    caso.ejecutar(historial_id, ActualizarHistorialCmd(**datos.model_dump(exclude_unset=True)))
     return HistorialOut.desde(consulta.obtener(historial_id))
 
 

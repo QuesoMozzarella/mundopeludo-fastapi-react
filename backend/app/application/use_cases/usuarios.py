@@ -1,6 +1,8 @@
 """Casos de uso de usuarios, perfiles y especialidades."""
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from ...domain.errors import ConflictError, NotFoundError, ValidationError
 from ...domain.model.usuario import Especialidad, PerfilCliente, PerfilVeterinario, Usuario
 from ...domain.ports.repositories import (
@@ -11,8 +13,28 @@ from ...domain.ports.repositories import (
 )
 from ...domain.ports.services import Clock
 from ...domain.value_objects import TipoUsuario
-from ..cambios import valor
+from ..cambios import SIN_CAMBIO, Cambio, enviado, nuevo, nuevo_o_vacio
 from ..read_models import UsuarioVista
+
+
+@dataclass(frozen=True, kw_only=True)
+class ActualizarUsuarioCmd:
+    email: Cambio[str | None] = SIN_CAMBIO
+    nombre: Cambio[str | None] = SIN_CAMBIO
+    apellidos: Cambio[str | None] = SIN_CAMBIO
+    telefono: Cambio[str | None] = SIN_CAMBIO
+    direccion: Cambio[str | None] = SIN_CAMBIO
+    tipo: Cambio[str | None] = SIN_CAMBIO
+    documento: Cambio[str | None] = SIN_CAMBIO
+    is_active: Cambio[bool | None] = SIN_CAMBIO
+
+
+@dataclass(frozen=True, kw_only=True)
+class ActualizarEspecialidadCmd:
+    codigo: Cambio[str | None] = SIN_CAMBIO
+    nombre: Cambio[str | None] = SIN_CAMBIO
+    descripcion: Cambio[str | None] = SIN_CAMBIO
+    activa: Cambio[bool | None] = SIN_CAMBIO
 
 
 class ConsultarUsuarios:
@@ -71,29 +93,28 @@ class ActualizarUsuario:
         self.perfiles_veterinario = perfiles_veterinario
         self.reloj = reloj
 
-    def ejecutar(self, usuario_id: int, cambios: dict) -> Usuario:
+    def ejecutar(self, usuario_id: int, cmd: ActualizarUsuarioCmd) -> Usuario:
         usuario = self.usuarios.obtener(usuario_id)
         if usuario is None:
             raise NotFoundError("Usuario", usuario_id)
 
-        if "email" in cambios and cambios["email"]:
-            nuevo = str(cambios["email"]).strip().lower()
-            existente = self.usuarios.obtener_por_email(nuevo)
+        if enviado(cmd.email):
+            existente = self.usuarios.obtener_por_email(str(cmd.email).strip().lower())
             if existente and existente.id != usuario.id:
                 raise ConflictError("Ese correo ya está en uso por otra cuenta")
 
         actualizado = Usuario(
             id=usuario.id,
-            email=cambios.get("email") or usuario.email,
-            nombre=cambios.get("nombre") or usuario.nombre,
-            apellidos=cambios.get("apellidos") or usuario.apellidos,
-            telefono=cambios.get("telefono", usuario.telefono),
-            direccion=cambios.get("direccion", usuario.direccion),
-            tipo=cambios.get("tipo") or usuario.tipo,
+            email=nuevo(cmd.email, usuario.email),
+            nombre=nuevo(cmd.nombre, usuario.nombre),
+            apellidos=nuevo(cmd.apellidos, usuario.apellidos),
+            telefono=nuevo_o_vacio(cmd.telefono, usuario.telefono),
+            direccion=nuevo_o_vacio(cmd.direccion, usuario.direccion),
+            tipo=nuevo(cmd.tipo, usuario.tipo),
             password_hash=usuario.password_hash,
-            is_active=valor(cambios, "is_active", usuario.is_active),
+            is_active=nuevo(cmd.is_active, usuario.is_active),
             # Si cambia el rol, `Usuario.__post_init__` decide is_staff de nuevo.
-            is_staff=usuario.is_staff if not cambios.get("tipo") else False,
+            is_staff=False if enviado(cmd.tipo) else usuario.is_staff,
             is_superuser=usuario.is_superuser,
             date_joined=usuario.date_joined,
             last_login=usuario.last_login,
@@ -102,8 +123,8 @@ class ActualizarUsuario:
         )
         self.usuarios.actualizar(actualizado)
 
-        documento = cambios.get("documento")
-        if documento is not None:
+        if enviado(cmd.documento):
+            documento = cmd.documento
             if actualizado.es_cliente:
                 perfil = self.perfiles_cliente.obtener_por_usuario(usuario.id) or PerfilCliente(
                     usuario_id=usuario.id, fecha_actualizacion=self.reloj.ahora()
@@ -221,14 +242,14 @@ class GestionarEspecialidades:
             Especialidad(codigo=codigo, nombre=nombre, descripcion=descripcion, activa=activa)
         )
 
-    def actualizar(self, especialidad_id: int, cambios: dict) -> Especialidad:
+    def actualizar(self, especialidad_id: int, cmd: ActualizarEspecialidadCmd) -> Especialidad:
         actual = self.obtener(especialidad_id)
         nueva = Especialidad(
             id=actual.id,
-            codigo=cambios.get("codigo") or actual.codigo,
-            nombre=cambios.get("nombre") or actual.nombre,
-            descripcion=cambios.get("descripcion", actual.descripcion),
-            activa=valor(cambios, "activa", actual.activa),
+            codigo=nuevo(cmd.codigo, actual.codigo),
+            nombre=nuevo(cmd.nombre, actual.nombre),
+            descripcion=nuevo_o_vacio(cmd.descripcion, actual.descripcion),
+            activa=nuevo(cmd.activa, actual.activa),
         )
         duplicada = self.especialidades.obtener_por_codigo(nueva.codigo)
         if duplicada and duplicada.id != actual.id:

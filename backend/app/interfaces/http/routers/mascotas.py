@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Query, status
 
+from ....application.use_cases.mascotas import ActualizarMascotaCmd, RegistrarMascotaCmd
 from ....domain.value_objects import EstadoAdopcion
 from ..casos import (
     ActualizarMascotaDep,
@@ -107,7 +108,7 @@ def crear_mascota(
     )
     if estado is not EstadoAdopcion.NORMAL:
         acceso.solo_personal()
-    mascota = caso.ejecutar(datos.model_dump())
+    mascota = caso.ejecutar(RegistrarMascotaCmd(**datos.model_dump()))
     return MascotaOut.desde(consulta.obtener(mascota.id))
 
 
@@ -126,7 +127,7 @@ def actualizar_mascota(
     if transfiere or "estado_adopcion" in cambios:
         # Transferir la mascota o publicarla en adopción es tarea del personal.
         acceso.solo_personal()
-    caso.ejecutar(mascota_id, cambios)
+    caso.ejecutar(mascota_id, ActualizarMascotaCmd(**cambios))
     return MascotaOut.desde(consulta.obtener(mascota_id))
 
 

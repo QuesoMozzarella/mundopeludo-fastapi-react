@@ -1,6 +1,7 @@
 """Casos de uso de la agenda: estados, servicios, disponibilidad y citas."""
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 
 from ...domain.errors import BusinessRuleError, ConflictError, NotFoundError, ValidationError
@@ -18,10 +19,54 @@ from ...domain.ports.repositories import (
 )
 from ...domain.ports.services import Clock
 from ...domain.value_objects import hora_local
-from ..cambios import valor
+from ..cambios import SIN_CAMBIO, Cambio, enviado, nuevo, nuevo_o_vacio
 from ..read_models import CitaVista, DisponibilidadVista, ServicioVista
 
 MINUTOS_ENTRE_CITAS = 30
+
+
+# ------------------------------- comandos -------------------------------
+@dataclass(frozen=True, kw_only=True)
+class CrearServicioCmd:
+    nombre: str
+    descripcion: str | None = None
+    activo: bool = True
+    veterinarios_ids: list[int] = field(default_factory=list)
+    especialidades_ids: list[int] = field(default_factory=list)
+
+
+@dataclass(frozen=True, kw_only=True)
+class ActualizarServicioCmd:
+    nombre: Cambio[str | None] = SIN_CAMBIO
+    descripcion: Cambio[str | None] = SIN_CAMBIO
+    activo: Cambio[bool | None] = SIN_CAMBIO
+    veterinarios_ids: Cambio[list[int] | None] = SIN_CAMBIO
+    especialidades_ids: Cambio[list[int] | None] = SIN_CAMBIO
+
+
+@dataclass(frozen=True, kw_only=True)
+class AgendarCitaCmd:
+    mascota_id: int
+    veterinario_id: int
+    servicio_id: int
+    fecha_hora: datetime
+    motivo: str
+    peso: float | None = None
+    notas: str | None = None
+    estado: str | None = None
+    estado_id: int | None = None
+
+
+@dataclass(frozen=True, kw_only=True)
+class ActualizarCitaCmd:
+    veterinario_id: Cambio[int | None] = SIN_CAMBIO
+    servicio_id: Cambio[int | None] = SIN_CAMBIO
+    fecha_hora: Cambio[datetime | None] = SIN_CAMBIO
+    motivo: Cambio[str | None] = SIN_CAMBIO
+    peso: Cambio[float | None] = SIN_CAMBIO
+    notas: Cambio[str | None] = SIN_CAMBIO
+    estado: Cambio[str | None] = SIN_CAMBIO
+    estado_id: Cambio[int | None] = SIN_CAMBIO
 
 
 class GestionarEstadosCita:
@@ -42,17 +87,6 @@ class GestionarEstadosCita:
         if self.estados.obtener_por_nombre(nombre):
             raise ConflictError(f"Ya existe el estado '{nombre}'")
         return self.estados.crear(EstadoCita(nombre=nombre, descripcion=descripcion, orden=orden))
-
-    def actualizar(self, estado_id: int, cambios: dict) -> EstadoCita:
-        actual = self.obtener(estado_id)
-        return self.estados.actualizar(
-            EstadoCita(
-                id=actual.id,
-                nombre=cambios.get("nombre") or actual.nombre,
-                descripcion=cambios.get("descripcion", actual.descripcion),
-                orden=valor(cambios, "orden", actual.orden),
-            )
-        )
 
     def eliminar(self, estado_id: int) -> None:
         self.obtener(estado_id)
@@ -80,33 +114,31 @@ class GestionarServicios:
     def obtener(self, servicio_id: int) -> ServicioVista:
         return self._componer(self._entidad(servicio_id))
 
-    def crear(self, datos: dict) -> ServicioVista:
+    def crear(self, cmd: CrearServicioCmd) -> ServicioVista:
         servicio = Servicio(
-            nombre=datos.get("nombre"),
-            descripcion=datos.get("descripcion"),
-            activo=datos.get("activo", True),
-            veterinarios_ids=self._validar_veterinarios(datos.get("veterinarios_ids") or []),
-            especialidades_ids=self._validar_especialidades(datos.get("especialidades_ids") or []),
+            nombre=cmd.nombre,
+            descripcion=cmd.descripcion,
+            activo=cmd.activo,
+            veterinarios_ids=self._validar_veterinarios(cmd.veterinarios_ids),
+            especialidades_ids=self._validar_especialidades(cmd.especialidades_ids),
         )
         return self._componer(self.servicios.crear(servicio))
 
-    def actualizar(self, servicio_id: int, cambios: dict) -> ServicioVista:
+    def actualizar(self, servicio_id: int, cmd: ActualizarServicioCmd) -> ServicioVista:
         actual = self._entidad(servicio_id)
-        veterinarios = cambios.get("veterinarios_ids")
-        especialidades = cambios.get("especialidades_ids")
         servicio = Servicio(
             id=actual.id,
-            nombre=cambios.get("nombre") or actual.nombre,
-            descripcion=cambios.get("descripcion", actual.descripcion),
-            activo=valor(cambios, "activo", actual.activo),
+            nombre=nuevo(cmd.nombre, actual.nombre),
+            descripcion=nuevo_o_vacio(cmd.descripcion, actual.descripcion),
+            activo=nuevo(cmd.activo, actual.activo),
             veterinarios_ids=(
-                self._validar_veterinarios(veterinarios)
-                if veterinarios is not None
+                self._validar_veterinarios(cmd.veterinarios_ids)
+                if enviado(cmd.veterinarios_ids)
                 else actual.veterinarios_ids
             ),
             especialidades_ids=(
-                self._validar_especialidades(especialidades)
-                if especialidades is not None
+                self._validar_especialidades(cmd.especialidades_ids)
+                if enviado(cmd.especialidades_ids)
                 else actual.especialidades_ids
             ),
         )
@@ -355,28 +387,26 @@ class AgendarCita:
         self.estados = estados
         self.reglas = reglas
 
-    def ejecutar(self, datos: dict) -> Cita:
-        mascota = self.mascotas.obtener(datos.get("mascota_id"))
+    def ejecutar(self, cmd: AgendarCitaCmd) -> Cita:
+        mascota = self.mascotas.obtener(cmd.mascota_id)
         if mascota is None:
-            raise NotFoundError("Mascota", datos.get("mascota_id"))
+            raise NotFoundError("Mascota", cmd.mascota_id)
         if not mascota.activo:
             raise BusinessRuleError(f"{mascota.nombre} está dada de baja")
 
-        veterinario = self.reglas.veterinario(datos.get("veterinario_id"))
-        servicio = self.reglas.servicio(datos.get("servicio_id"), veterinario)
-        estado = _resolver_estado(
-            self.estados, datos.get("estado_id"), datos.get("estado") or "Pendiente"
-        )
+        veterinario = self.reglas.veterinario(cmd.veterinario_id)
+        servicio = self.reglas.servicio(cmd.servicio_id, veterinario)
+        estado = _resolver_estado(self.estados, cmd.estado_id, cmd.estado or "Pendiente")
 
         cita = Cita(
             mascota_id=mascota.id,
             veterinario_id=veterinario.id,
             estado_id=estado.id,
             servicio_id=servicio.id,
-            fecha_hora=datos.get("fecha_hora"),
-            peso=datos.get("peso") or mascota.peso,
-            motivo=datos.get("motivo"),
-            notas=datos.get("notas"),
+            fecha_hora=cmd.fecha_hora,
+            peso=cmd.peso or mascota.peso,
+            motivo=cmd.motivo,
+            notas=cmd.notas,
         )
         self.reglas.horario(cita)
         return self.citas.crear(cita)
@@ -393,24 +423,24 @@ class ActualizarCita:
         self.estados = estados
         self.reglas = reglas
 
-    def ejecutar(self, cita_id: int, cambios: dict) -> Cita:
+    def ejecutar(self, cita_id: int, cmd: ActualizarCitaCmd) -> Cita:
         actual = self._obtener(cita_id)
         estado_id = actual.estado_id
-        if cambios.get("estado_id") or cambios.get("estado"):
+        if enviado(cmd.estado_id) or enviado(cmd.estado):
             estado_id = _resolver_estado(
-                self.estados, cambios.get("estado_id"), cambios.get("estado")
+                self.estados, nuevo(cmd.estado_id, None), nuevo(cmd.estado, None)
             ).id
 
         actualizada = Cita(
             id=actual.id,
             mascota_id=actual.mascota_id,
-            veterinario_id=cambios.get("veterinario_id") or actual.veterinario_id,
+            veterinario_id=nuevo(cmd.veterinario_id, actual.veterinario_id),
             estado_id=estado_id,
-            servicio_id=cambios.get("servicio_id") or actual.servicio_id,
-            fecha_hora=cambios.get("fecha_hora") or actual.fecha_hora,
-            peso=valor(cambios, "peso", actual.peso),
-            motivo=cambios.get("motivo") or actual.motivo,
-            notas=cambios.get("notas", actual.notas),
+            servicio_id=nuevo(cmd.servicio_id, actual.servicio_id),
+            fecha_hora=nuevo(cmd.fecha_hora, actual.fecha_hora),
+            peso=nuevo(cmd.peso, actual.peso),
+            motivo=nuevo(cmd.motivo, actual.motivo),
+            notas=nuevo_o_vacio(cmd.notas, actual.notas),
         )
 
         # Sólo se revalida la agenda si cambia cuándo, con quién o qué: así

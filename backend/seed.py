@@ -17,10 +17,24 @@ from app.entorno import cargar_env  # noqa: E402
 cargar_env()  # antes de importar la configuración
 
 from app.application.use_cases.autenticacion import RegistrarUsuario  # noqa: E402
-from app.application.use_cases.citas import AgendarCita, ReglasDeAgenda  # noqa: E402
-from app.application.use_cases.historiales import RegistrarHistorial  # noqa: E402
-from app.application.use_cases.inventario import CrearProducto, GeneradorSku  # noqa: E402
-from app.application.use_cases.mascotas import RegistrarMascota  # noqa: E402
+from app.application.use_cases.citas import (  # noqa: E402
+    AgendarCita,
+    AgendarCitaCmd,
+    ReglasDeAgenda,
+)
+from app.application.use_cases.historiales import (  # noqa: E402
+    RegistrarHistorial,
+    RegistrarHistorialCmd,
+)
+from app.application.use_cases.inventario import (  # noqa: E402
+    CrearProducto,
+    CrearProductoCmd,
+    GeneradorSku,
+)
+from app.application.use_cases.mascotas import (  # noqa: E402
+    RegistrarMascota,
+    RegistrarMascotaCmd,
+)
 from app.domain.model.cita import Servicio  # noqa: E402
 from app.domain.model.usuario import Especialidad  # noqa: E402
 from app.interfaces.http.deps import Contenedor  # noqa: E402
@@ -143,41 +157,41 @@ def poblar() -> None:
             repos.mascotas, repos.especies, repos.usuarios, servicios_tec.reloj
         )
         luna = registrar_mascota.ejecutar(
-            {
-                "cliente_id": maria.id,
-                "especie_id": especies["Canino (Perro)"],
-                "nombre": "Luna",
-                "raza": "Golden Retriever",
-                "edad_anos": 3,
-                "sexo": "Hembra",
-                "color": "dorado",
-                "peso": 28.5,
-                "esta_esterilizado": True,
-            }
+            RegistrarMascotaCmd(
+                cliente_id=maria.id,
+                especie_id=especies["Canino (Perro)"],
+                nombre="Luna",
+                raza="Golden Retriever",
+                edad_anos=3,
+                sexo="Hembra",
+                color="dorado",
+                peso=28.5,
+                esta_esterilizado=True,
+            )
         )
         registrar_mascota.ejecutar(
-            {
-                "cliente_id": carlos.id,
-                "especie_id": especies["Felino (Gato)"],
-                "nombre": "Michi",
-                "raza": "Siamés",
-                "edad_anos": 2,
-                "sexo": "Macho",
-                "color": "gris",
-                "peso": 4.2,
-            }
+            RegistrarMascotaCmd(
+                cliente_id=carlos.id,
+                especie_id=especies["Felino (Gato)"],
+                nombre="Michi",
+                raza="Siamés",
+                edad_anos=2,
+                sexo="Macho",
+                color="gris",
+                peso=4.2,
+            )
         )
         registrar_mascota.ejecutar(
-            {
-                "especie_id": especies["Canino (Perro)"],
-                "nombre": "Rocky",
-                "raza": "Mestizo",
-                "edad_anos": 1,
-                "sexo": "Macho",
-                "color": "negro",
-                "peso": 12.0,
-                "estado_adopcion": "en_adopcion",
-            }
+            RegistrarMascotaCmd(
+                especie_id=especies["Canino (Perro)"],
+                nombre="Rocky",
+                raza="Mestizo",
+                edad_anos=1,
+                sexo="Macho",
+                color="negro",
+                peso=12.0,
+                estado_adopcion="en_adopcion",
+            )
         )
 
         # 5. Una cita con su historial
@@ -190,14 +204,14 @@ def poblar() -> None:
         )
         agendar = AgendarCita(repos.citas, repos.mascotas, repos.estados_cita, reglas)
         cita = agendar.ejecutar(
-            {
-                "mascota_id": luna.id,
-                "veterinario_id": vet_garcia.id,
-                "servicio_id": servicios["Consulta General"],
-                "fecha_hora": datetime.now() + timedelta(days=1, hours=2),
-                "motivo": "Control anual y refuerzo de vacunas",
-                "estado": "Confirmada",
-            }
+            AgendarCitaCmd(
+                mascota_id=luna.id,
+                veterinario_id=vet_garcia.id,
+                servicio_id=servicios["Consulta General"],
+                fecha_hora=datetime.now() + timedelta(days=1, hours=2),
+                motivo="Control anual y refuerzo de vacunas",
+                estado="Confirmada",
+            )
         )
         RegistrarHistorial(
             repos.historiales,
@@ -207,12 +221,12 @@ def poblar() -> None:
             repos.estados_cita,
             servicios_tec.reloj,
         ).ejecutar(
-            {
-                "cita_id": cita.id,
-                "diagnostico": "Paciente sano, peso adecuado para la raza",
-                "tratamiento": "Refuerzo de vacuna séxtuple y antiparasitario oral",
-                "observaciones": "Control en 12 meses",
-            }
+            RegistrarHistorialCmd(
+                cita_id=cita.id,
+                diagnostico="Paciente sano, peso adecuado para la raza",
+                tratamiento="Refuerzo de vacuna séxtuple y antiparasitario oral",
+                observaciones="Control en 12 meses",
+            )
         )
 
         # 6. Productos
@@ -266,7 +280,7 @@ def poblar() -> None:
                 "unidad_medida": "ml",
             },
         ]:
-            crear_producto.ejecutar(datos)
+            crear_producto.ejecutar(CrearProductoCmd(**datos))
 
     print("Listo.")
     print(f"  Base de datos : {contenedor.config.ruta_bd}")

@@ -6,6 +6,7 @@ import binascii
 
 from fastapi import APIRouter, Query, Response, status
 
+from ....application.use_cases.inventario import ActualizarProductoCmd, CrearProductoCmd
 from ....domain.errors import ValidationError
 from ..casos import (
     ActualizarProductoDep,
@@ -60,7 +61,7 @@ def obtener_producto(producto_id: int, consulta: ConsultarProductosDep) -> Produ
 def crear_producto(
     datos: ProductoIn, caso: CrearProductoDep, consulta: ConsultarProductosDep
 ) -> ProductoOut:
-    producto = caso.ejecutar(datos.model_dump())
+    producto = caso.ejecutar(CrearProductoCmd(**datos.model_dump()))
     return ProductoOut.desde(consulta.obtener(producto.id))
 
 
@@ -76,7 +77,7 @@ def actualizar_producto(
     caso: ActualizarProductoDep,
     consulta: ConsultarProductosDep,
 ) -> ProductoOut:
-    caso.ejecutar(producto_id, datos.model_dump(exclude_unset=True))
+    caso.ejecutar(producto_id, ActualizarProductoCmd(**datos.model_dump(exclude_unset=True)))
     return ProductoOut.desde(consulta.obtener(producto_id))
 
 

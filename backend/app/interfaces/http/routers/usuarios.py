@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Query, status
 
+from ....application.use_cases.usuarios import ActualizarEspecialidadCmd, ActualizarUsuarioCmd
 from ....domain.value_objects import TipoUsuario
 from ..casos import (
     ActualizarUsuarioDep,
@@ -79,7 +80,7 @@ def actualizar_usuario(
     if {"tipo", "is_active"} & cambios.keys():
         # Cambiar el rol o dar de baja una cuenta no es autoservicio.
         acceso.solo_administrador()
-    caso.ejecutar(usuario_id, cambios)
+    caso.ejecutar(usuario_id, ActualizarUsuarioCmd(**cambios))
     return UsuarioOut.desde(consulta.obtener(usuario_id))
 
 
@@ -162,9 +163,8 @@ def crear_especialidad(datos: EspecialidadIn, caso: GestionarEspecialidadesDep) 
 def actualizar_especialidad(
     especialidad_id: int, datos: EspecialidadActualizarIn, caso: GestionarEspecialidadesDep
 ) -> EspecialidadOut:
-    return EspecialidadOut.desde(
-        caso.actualizar(especialidad_id, datos.model_dump(exclude_unset=True))
-    )
+    cmd = ActualizarEspecialidadCmd(**datos.model_dump(exclude_unset=True))
+    return EspecialidadOut.desde(caso.actualizar(especialidad_id, cmd))
 
 
 @router.delete(

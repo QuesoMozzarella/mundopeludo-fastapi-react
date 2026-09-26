@@ -1236,6 +1236,32 @@ def test_el_dominio_usa_el_reloj_inyectado():
     assert cli.get(f"/api/productos/{vencido['id']}").json()["vencido"] is False
 
 
+def test_actualizacion_parcial_distingue_ausente_null_y_valor():
+    cli = nuevo_cliente()
+    producto = cli.post(
+        "/api/productos",
+        {"nombre": "Collar Luminoso", "categoria": "accesorio", "precio": 15, "stock": 4,
+         "marca": "PetGlow", "descripcion": "Collar LED recargable"},
+    ).json()
+    ruta = f"/api/productos/{producto['id']}"
+
+    # Campo ausente: se conserva. Campo con valor: se cambia.
+    r = cli.put(ruta, {"stock": 9}).json()
+    assert r["stock"] == 9 and r["marca"] == "PetGlow" and r["descripcion"] == "Collar LED recargable"
+
+    # `null` en un campo opcional lo vacía; en uno obligatorio no cambia nada.
+    r = cli.put(ruta, {"descripcion": None, "precio": None}).json()
+    assert r["descripcion"] is None and r["precio"] == 15.0, r
+
+    # Un servicio: `null` en la lista de veterinarios no la borra.
+    vet = _crear(cli, "parcial-vet@test.com", "veterinario")
+    servicio = cli.post(
+        "/api/servicios", {"nombre": "Peluquería", "veterinarios_ids": [vet["id"]]}
+    ).json()
+    r = cli.put(f"/api/servicios/{servicio['id']}", {"veterinarios_ids": None, "descripcion": "Corte"})
+    assert r.json()["veterinarios_ids"] == [vet["id"]] and r.json()["descripcion"] == "Corte", r
+
+
 def _ejecutar_todo() -> int:
     pruebas = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     fallos = 0

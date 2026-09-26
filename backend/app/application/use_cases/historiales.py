@@ -1,6 +1,8 @@
 """Casos de uso de historiales médicos."""
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from ...domain.errors import (
     BusinessRuleError,
     ConflictError,
@@ -17,7 +19,27 @@ from ...domain.ports.repositories import (
     UsuarioRepository,
 )
 from ...domain.ports.services import Clock
+from ..cambios import SIN_CAMBIO, Cambio, nuevo
 from ..read_models import HistorialVista
+
+
+@dataclass(frozen=True, kw_only=True)
+class RegistrarHistorialCmd:
+    """Con `cita_id`, mascota y veterinario salen de la cita si no se indican."""
+
+    diagnostico: str
+    tratamiento: str
+    cita_id: int | None = None
+    mascota_id: int | None = None
+    veterinario_id: int | None = None
+    observaciones: str | None = None
+
+
+@dataclass(frozen=True, kw_only=True)
+class ActualizarHistorialCmd:
+    diagnostico: Cambio[str | None] = SIN_CAMBIO
+    tratamiento: Cambio[str | None] = SIN_CAMBIO
+    observaciones: Cambio[str | None] = SIN_CAMBIO
 
 
 class ConsultarHistoriales:
@@ -85,19 +107,19 @@ class RegistrarHistorial:
         self.estados = estados
         self.reloj = reloj
 
-    def ejecutar(self, datos: dict) -> HistorialMedico:
-        cita = self._cita(datos.get("cita_id"))
-        mascota_id = self._mascota(datos.get("mascota_id"), cita)
-        veterinario_id = self._veterinario(datos.get("veterinario_id"), cita)
+    def ejecutar(self, cmd: RegistrarHistorialCmd) -> HistorialMedico:
+        cita = self._cita(cmd.cita_id)
+        mascota_id = self._mascota(cmd.mascota_id, cita)
+        veterinario_id = self._veterinario(cmd.veterinario_id, cita)
 
         historial = self.historiales.crear(
             HistorialMedico(
                 mascota_id=mascota_id,
                 cita_id=cita.id if cita else None,
                 veterinario_id=veterinario_id,
-                diagnostico=datos.get("diagnostico"),
-                tratamiento=datos.get("tratamiento"),
-                observaciones=datos.get("observaciones"),
+                diagnostico=cmd.diagnostico,
+                tratamiento=cmd.tratamiento,
+                observaciones=cmd.observaciones,
                 fecha_creacion=self.reloj.ahora(),
             )
         )
@@ -158,14 +180,15 @@ class ActualizarHistorial:
     def __init__(self, historiales: HistorialMedicoRepository):
         self.historiales = historiales
 
-    def ejecutar(self, historial_id: int, cambios: dict) -> HistorialMedico:
+    def ejecutar(self, historial_id: int, cmd: ActualizarHistorialCmd) -> HistorialMedico:
         historial = self.historiales.obtener(historial_id)
         if historial is None:
             raise NotFoundError("Historial médico", historial_id)
+        # `HistorialMedico.actualizar` ignora los None: no enviado = sin cambio.
         historial.actualizar(
-            diagnostico=cambios.get("diagnostico"),
-            tratamiento=cambios.get("tratamiento"),
-            observaciones=cambios.get("observaciones"),
+            diagnostico=nuevo(cmd.diagnostico, None),
+            tratamiento=nuevo(cmd.tratamiento, None),
+            observaciones=nuevo(cmd.observaciones, None),
         )
         return self.historiales.actualizar(historial)
 

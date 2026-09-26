@@ -1,6 +1,8 @@
 """Casos de uso de especies y mascotas."""
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from ...domain.errors import ConflictError, NotFoundError, ValidationError
 from ...domain.model.mascota import Especie, Mascota
 from ...domain.ports.repositories import (
@@ -10,7 +12,7 @@ from ...domain.ports.repositories import (
 )
 from ...domain.ports.services import Clock
 from ...domain.value_objects import EstadoAdopcion
-from ..cambios import valor
+from ..cambios import SIN_CAMBIO, Cambio, nuevo, nuevo_o_vacio
 from ..read_models import MascotaVista
 
 
@@ -45,6 +47,35 @@ class GestionarEspecies:
         if self.mascotas.listar(especie_id=especie_id, activo=None):
             raise ConflictError("No se puede eliminar: hay mascotas registradas con esa especie")
         self.especies.eliminar(especie_id)
+
+
+@dataclass(frozen=True, kw_only=True)
+class RegistrarMascotaCmd:
+    especie_id: int
+    nombre: str
+    sexo: str
+    color: str
+    cliente_id: int | None = None
+    raza: str | None = None
+    edad_anos: int = 1
+    peso: float = 1.0
+    esta_esterilizado: bool = False
+    estado_adopcion: str = EstadoAdopcion.NORMAL.value
+
+
+@dataclass(frozen=True, kw_only=True)
+class ActualizarMascotaCmd:
+    especie_id: Cambio[int | None] = SIN_CAMBIO
+    nombre: Cambio[str | None] = SIN_CAMBIO
+    sexo: Cambio[str | None] = SIN_CAMBIO
+    color: Cambio[str | None] = SIN_CAMBIO
+    cliente_id: Cambio[int | None] = SIN_CAMBIO
+    raza: Cambio[str | None] = SIN_CAMBIO
+    edad_anos: Cambio[int | None] = SIN_CAMBIO
+    peso: Cambio[float | None] = SIN_CAMBIO
+    esta_esterilizado: Cambio[bool | None] = SIN_CAMBIO
+    estado_adopcion: Cambio[str | None] = SIN_CAMBIO
+    activo: Cambio[bool | None] = SIN_CAMBIO
 
 
 class ConsultarMascotas:
@@ -118,12 +149,12 @@ class RegistrarMascota:
         self.usuarios = usuarios
         self.reloj = reloj
 
-    def ejecutar(self, datos: dict) -> Mascota:
-        especie_id = datos.get("especie_id")
+    def ejecutar(self, cmd: RegistrarMascotaCmd) -> Mascota:
+        especie_id = cmd.especie_id
         if self.especies.obtener(especie_id) is None:
             raise NotFoundError("Especie", especie_id)
 
-        cliente_id = datos.get("cliente_id")
+        cliente_id = cmd.cliente_id
         if cliente_id is not None:
             cliente = self.usuarios.obtener(cliente_id)
             if cliente is None:
@@ -134,14 +165,14 @@ class RegistrarMascota:
         mascota = Mascota(
             cliente_id=cliente_id,
             especie_id=especie_id,
-            nombre=datos.get("nombre"),
-            raza=datos.get("raza"),
-            edad_anos=datos.get("edad_anos", 1),
-            sexo=datos.get("sexo"),
-            color=datos.get("color"),
-            peso=datos.get("peso", 1.0),
-            esta_esterilizado=datos.get("esta_esterilizado", False),
-            estado_adopcion=datos.get("estado_adopcion", EstadoAdopcion.NORMAL),
+            nombre=cmd.nombre,
+            raza=cmd.raza,
+            edad_anos=cmd.edad_anos,
+            sexo=cmd.sexo,
+            color=cmd.color,
+            peso=cmd.peso,
+            esta_esterilizado=cmd.esta_esterilizado,
+            estado_adopcion=cmd.estado_adopcion,
             fecha_registro=self.reloj.hoy(),
         )
         return self.mascotas.crear(mascota)
@@ -158,16 +189,17 @@ class ActualizarMascota:
         self.especies = especies
         self.usuarios = usuarios
 
-    def ejecutar(self, mascota_id: int, cambios: dict) -> Mascota:
+    def ejecutar(self, mascota_id: int, cmd: ActualizarMascotaCmd) -> Mascota:
         actual = self.mascotas.obtener(mascota_id)
         if actual is None:
             raise NotFoundError("Mascota", mascota_id)
 
-        especie_id = valor(cambios, "especie_id", actual.especie_id)
+        especie_id = nuevo(cmd.especie_id, actual.especie_id)
         if especie_id != actual.especie_id and self.especies.obtener(especie_id) is None:
             raise NotFoundError("Especie", especie_id)
 
-        cliente_id = cambios.get("cliente_id", actual.cliente_id)
+        # `null` en cliente_id deja la mascota sin tutor (p. ej. para adopción).
+        cliente_id = nuevo_o_vacio(cmd.cliente_id, actual.cliente_id)
         if cliente_id is not None and cliente_id != actual.cliente_id:
             cliente = self.usuarios.obtener(cliente_id)
             if cliente is None:
@@ -180,16 +212,16 @@ class ActualizarMascota:
             id=actual.id,
             cliente_id=cliente_id,
             especie_id=especie_id,
-            nombre=cambios.get("nombre") or actual.nombre,
-            raza=cambios.get("raza", actual.raza),
-            edad_anos=valor(cambios, "edad_anos", actual.edad_anos),
-            sexo=cambios.get("sexo") or actual.sexo,
-            color=cambios.get("color") or actual.color,
-            peso=valor(cambios, "peso", actual.peso),
-            esta_esterilizado=valor(cambios, "esta_esterilizado", actual.esta_esterilizado),
-            activo=valor(cambios, "activo", actual.activo),
+            nombre=nuevo(cmd.nombre, actual.nombre),
+            raza=nuevo_o_vacio(cmd.raza, actual.raza),
+            edad_anos=nuevo(cmd.edad_anos, actual.edad_anos),
+            sexo=nuevo(cmd.sexo, actual.sexo),
+            color=nuevo(cmd.color, actual.color),
+            peso=nuevo(cmd.peso, actual.peso),
+            esta_esterilizado=nuevo(cmd.esta_esterilizado, actual.esta_esterilizado),
+            activo=nuevo(cmd.activo, actual.activo),
             fecha_registro=actual.fecha_registro,
-            estado_adopcion=valor(cambios, "estado_adopcion", actual.estado_adopcion),
+            estado_adopcion=nuevo(cmd.estado_adopcion, actual.estado_adopcion),
         )
         return self.mascotas.actualizar(actualizada)
 
