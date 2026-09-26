@@ -33,6 +33,8 @@ class MascotaIn(BaseModel):
     peso: float = Field(default=1.0, gt=0, le=100)
     esta_esterilizado: bool = False
     estado_adopcion: str = "normal"
+    descripcion: str | None = None
+    imagen_url: str | None = None
 
 
 class MascotaActualizarIn(BaseModel):
@@ -47,6 +49,8 @@ class MascotaActualizarIn(BaseModel):
     esta_esterilizado: bool | None = None
     estado_adopcion: str | None = None
     activo: bool | None = None
+    descripcion: str | None = None
+    imagen_url: str | None = None
 
 
 class MascotaOut(BaseModel):
@@ -67,6 +71,9 @@ class MascotaOut(BaseModel):
     cliente_id: int | None = None
     cliente_nombre: str | None = None
     cliente_email: str | None = None
+    cliente_telefono: str | None = None
+    descripcion: str | None = None
+    imagen_url: str | None = None
 
     @classmethod
     def desde(cls, vista: MascotaVista) -> "MascotaOut":
@@ -89,6 +96,9 @@ class MascotaOut(BaseModel):
             cliente_id=m.cliente_id,
             cliente_nombre=vista.cliente_nombre,
             cliente_email=vista.cliente_email,
+            cliente_telefono=vista.cliente_telefono,
+            descripcion=m.descripcion,
+            imagen_url=m.imagen_url,
         )
 
 
@@ -113,9 +123,12 @@ class SolicitudAdopcionOut(BaseModel):
     id: int
     mascota_id: int
     mascota_nombre: str
+    mascota_raza: str | None = None
+    mascota_imagen_url: str | None = None
     cliente_id: int
     cliente_nombre: str
     cliente_email: str
+    cliente_telefono: str | None = None
     estado: str
     fecha_solicitud: datetime
     fecha_actualizacion: datetime
@@ -132,9 +145,12 @@ class SolicitudAdopcionOut(BaseModel):
             id=s.id,
             mascota_id=s.mascota_id,
             mascota_nombre=vista.mascota_nombre,
+            mascota_raza=vista.mascota_raza,
+            mascota_imagen_url=vista.mascota_imagen_url,
             cliente_id=s.cliente_id,
             cliente_nombre=vista.cliente_nombre,
             cliente_email=vista.cliente_email,
+            cliente_telefono=vista.cliente_telefono,
             estado=s.estado.value,
             fecha_solicitud=s.fecha_solicitud,
             fecha_actualizacion=s.fecha_actualizacion,

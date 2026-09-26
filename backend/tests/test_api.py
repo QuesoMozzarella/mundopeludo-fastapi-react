@@ -1374,6 +1374,59 @@ def test_fallo_del_correo_no_rompe_la_operacion():
     assert cli.get(f"/api/citas/{cita['id']}").json()["estado"] == "Confirmada"
 
 
+def test_campos_que_consume_el_frontend():
+    cli = nuevo_cliente()
+    vet = _crear(cli, "campos-vet@test.com", "veterinario")
+    tutor = _crear(cli, "campos-tutor@test.com", telefono="3001234567")
+    especie = cli.get("/api/especies").json()[0]
+    mascota = cli.post(
+        "/api/mascotas",
+        {"cliente_id": tutor["id"], "especie_id": especie["id"], "nombre": "Kiwi",
+         "raza": "Beagle", "sexo": "Macho", "color": "tricolor",
+         "descripcion": "Juguetón y sociable", "imagen_url": "https://example.com/kiwi.jpg"},
+    )
+    assert mascota.status == 201, mascota
+    mascota = mascota.json()
+    assert mascota["descripcion"] == "Juguetón y sociable"
+    assert mascota["imagen_url"] == "https://example.com/kiwi.jpg"
+    assert mascota["cliente_telefono"] == "3001234567"
+
+    # La imagen se pinta en un <img>: sólo se aceptan URLs http(s).
+    mala = cli.put(f"/api/mascotas/{mascota['id']}", {"imagen_url": "javascript:alert(1)"})
+    assert mala.status == 422, mala
+    vaciada = cli.put(f"/api/mascotas/{mascota['id']}", {"descripcion": None}).json()
+    assert vaciada["descripcion"] is None and vaciada["imagen_url"] == "https://example.com/kiwi.jpg"
+
+    servicio = cli.post("/api/servicios", {"nombre": "Chequeo", "veterinarios_ids": [vet["id"]]}).json()
+    manana = (datetime.now() + timedelta(days=1)).replace(hour=9, minute=0, second=0, microsecond=0)
+    base = {"mascota_id": mascota["id"], "veterinario_id": vet["id"],
+            "servicio_id": servicio["id"], "motivo": "Chequeo general"}
+    cita = cli.post("/api/citas", {**base, "fecha_hora": manana.isoformat()}).json()
+    assert cita["cliente_email"] == "campos-tutor@test.com" and cita["mascota_raza"] == "Beagle"
+    assert cita["cliente_telefono"] == "3001234567"
+    cli.post("/api/citas", {**base, "fecha_hora": (manana + timedelta(hours=1)).isoformat(),
+                            "estado": "Confirmada"})
+    cancelada = cli.post("/api/citas", {**base, "fecha_hora": (manana + timedelta(hours=2)).isoformat()}).json()
+    cli.put(f"/api/citas/{cancelada['id']}/estado", {"estado": "Cancelada"})
+    assert cli.get("/api/dashboard/stats").json()["citas_activas"] == 2  # pendiente + confirmada
+
+    historial = cli.post(
+        "/api/historiales-medicos",
+        {"cita_id": cita["id"], "diagnostico": "Sano", "tratamiento": "Ninguno"},
+    ).json()
+    assert historial["mascota_raza"] == "Beagle"
+
+    refugio = cli.post(
+        "/api/mascotas",
+        {"especie_id": especie["id"], "nombre": "Nube", "sexo": "Hembra", "color": "blanco"},
+    ).json()
+    cli.put(f"/api/adopciones/mascotas/{refugio['id']}/publicar")
+    solicitud = cli.post(
+        "/api/adopciones/solicitudes", {"mascota_id": refugio["id"], "cliente_id": tutor["id"]}
+    ).json()
+    assert solicitud["cliente_telefono"] == "3001234567", solicitud
+
+
 def _ejecutar_todo() -> int:
     pruebas = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     fallos = 0

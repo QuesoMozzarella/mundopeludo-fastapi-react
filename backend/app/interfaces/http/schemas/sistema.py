@@ -42,6 +42,7 @@ class EstadisticasOut(BaseModel):
     solicitudes_pendientes: int
     citas_hoy: int
     citas_totales: int
+    citas_activas: int
     total_productos: int
     productos_stock_bajo: int
     productos_por_vencer: int

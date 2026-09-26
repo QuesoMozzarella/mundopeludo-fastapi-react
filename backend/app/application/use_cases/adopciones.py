@@ -55,8 +55,11 @@ class ConsultarSolicitudesAdopcion:
         return SolicitudVista(
             solicitud=solicitud,
             mascota_nombre=mascota.nombre if mascota else "",
+            mascota_raza=mascota.raza if mascota else None,
+            mascota_imagen_url=mascota.imagen_url if mascota else None,
             cliente_nombre=cliente.nombre_completo if cliente else "",
             cliente_email=cliente.email if cliente else "",
+            cliente_telefono=cliente.telefono if cliente else None,
             revisor_nombre=revisor.nombre_completo if revisor else None,
         )
 

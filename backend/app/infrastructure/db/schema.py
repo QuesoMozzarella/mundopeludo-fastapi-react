@@ -85,6 +85,8 @@ CREATE TABLE IF NOT EXISTS mascotas (
     fecha_registro     TEXT    NOT NULL,
     estado_adopcion    TEXT    NOT NULL DEFAULT 'normal'
                        CHECK (estado_adopcion IN ('normal','en_adopcion','adoptada','pendiente')),
+    descripcion        TEXT,
+    imagen_url         TEXT,
     FOREIGN KEY (cliente_id) REFERENCES usuarios(id) ON DELETE CASCADE,
     FOREIGN KEY (especie_id) REFERENCES especies(id)
 );
@@ -342,6 +344,11 @@ def migrar(conn) -> None:
             "ALTER TABLE usuarios ADD COLUMN intentos_fallidos INTEGER NOT NULL DEFAULT 0"
         )
         conn.execute("ALTER TABLE usuarios ADD COLUMN bloqueado_hasta TEXT")
+    mascotas = _columnas(conn, "mascotas")
+    if mascotas and "descripcion" not in mascotas:
+        # v3 → v4: descripción e imagen de la mascota (las pide el frontend).
+        conn.execute("ALTER TABLE mascotas ADD COLUMN descripcion TEXT")
+        conn.execute("ALTER TABLE mascotas ADD COLUMN imagen_url TEXT")
     historiales = _columnas(conn, "historiales_medicos")
     if historiales and "mascota_id" not in historiales:
         # v1 → v2: la cita del historial pasa a ser opcional.

@@ -55,6 +55,8 @@ def _a_mascota(fila: sqlite3.Row) -> Mascota:
         activo=a_bool(fila["activo"]),
         fecha_registro=a_date(fila["fecha_registro"]),
         estado_adopcion=EstadoAdopcion(fila["estado_adopcion"]),
+        descripcion=fila["descripcion"],
+        imagen_url=fila["imagen_url"],
     )
 
 
@@ -63,13 +65,15 @@ class SqliteMascotaRepository(RepositorioSQLite, MascotaRepository):
         mascota.id = self._insertar(
             """INSERT INTO mascotas
                (cliente_id, especie_id, nombre, raza, edad_anos, sexo, color, peso,
-                esta_esterilizado, activo, fecha_registro, estado_adopcion)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+                esta_esterilizado, activo, fecha_registro, estado_adopcion,
+                descripcion, imagen_url)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 mascota.cliente_id, mascota.especie_id, mascota.nombre, mascota.raza,
                 mascota.edad_anos, mascota.sexo.value, mascota.color, mascota.peso,
                 int(mascota.esta_esterilizado), int(mascota.activo),
                 mascota.fecha_registro, mascota.estado_adopcion.value,
+                mascota.descripcion, mascota.imagen_url,
             ),
         )
         return mascota
@@ -77,13 +81,15 @@ class SqliteMascotaRepository(RepositorioSQLite, MascotaRepository):
     def actualizar(self, mascota: Mascota) -> Mascota:
         self._ejecutar(
             """UPDATE mascotas SET cliente_id=?, especie_id=?, nombre=?, raza=?, edad_anos=?,
-                   sexo=?, color=?, peso=?, esta_esterilizado=?, activo=?, estado_adopcion=?
+                   sexo=?, color=?, peso=?, esta_esterilizado=?, activo=?, estado_adopcion=?,
+                   descripcion=?, imagen_url=?
                WHERE id=?""",
             (
                 mascota.cliente_id, mascota.especie_id, mascota.nombre, mascota.raza,
                 mascota.edad_anos, mascota.sexo.value, mascota.color, mascota.peso,
                 int(mascota.esta_esterilizado), int(mascota.activo),
-                mascota.estado_adopcion.value, mascota.id,
+                mascota.estado_adopcion.value, mascota.descripcion, mascota.imagen_url,
+                mascota.id,
             ),
         )
         return mascota

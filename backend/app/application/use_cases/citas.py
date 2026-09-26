@@ -351,8 +351,12 @@ class ConsultarCitas:
         return CitaVista(
             cita=cita,
             mascota_nombre=mascota.nombre if mascota else "",
+            mascota_raza=mascota.raza if mascota else None,
+            mascota_imagen_url=mascota.imagen_url if mascota else None,
             cliente_id=mascota.cliente_id if mascota else None,
             cliente_nombre=cliente.nombre_completo if cliente else None,
+            cliente_email=cliente.email if cliente else None,
+            cliente_telefono=cliente.telefono if cliente else None,
             veterinario_nombre=veterinario.nombre_completo if veterinario else "",
             servicio_nombre=servicio.nombre if servicio else "",
             estado_nombre=estado.nombre if estado else "",

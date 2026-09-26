@@ -71,7 +71,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
             <div className="text-3xl font-extrabold text-slate-900">{stats.total_citas}</div>
             <div className="text-xs text-slate-500 mt-1">
-              <span className="text-emerald-600 font-semibold">{stats.citas_activas ?? 2} activas</span> • {stats.solicitudes_pendientes ?? 0} pendientes
+              <span className="text-emerald-600 font-semibold">{stats.citas_activas ?? 0} activas</span> • {stats.solicitudes_pendientes ?? 0} pendientes
             </div>
           </div>
 

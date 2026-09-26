@@ -668,6 +668,7 @@ def obtener_estadisticas(repos: ReposDep, servicios: ServiciosDep) -> ObtenerEst
         repos.historiales,
         repos.productos,
         repos.pedidos,
+        repos.estados_cita,
         servicios.reloj,
     )
 

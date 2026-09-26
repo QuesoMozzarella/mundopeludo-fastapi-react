@@ -11,6 +11,10 @@ from ..errors import BusinessRuleError, ValidationError
 from ..value_objects import EstadoAdopcion, EstadoSolicitud, Sexo
 
 
+MAX_DESCRIPCION = 1000
+MAX_URL_IMAGEN = 500
+
+
 @dataclass
 class Especie:
     """`Especie`: nombre único."""
@@ -43,6 +47,8 @@ class Mascota:
     activo: bool = True
     fecha_registro: date = field(kw_only=True)
     estado_adopcion: EstadoAdopcion = EstadoAdopcion.NORMAL
+    descripcion: str | None = None
+    imagen_url: str | None = None
     id: int | None = None
 
     def __post_init__(self) -> None:
@@ -97,6 +103,22 @@ class Mascota:
 
         if self.especie_id is None:
             raise ValidationError("La mascota debe pertenecer a una especie", "especie_id")
+
+        self.descripcion = (self.descripcion or "").strip() or None
+        if self.descripcion and len(self.descripcion) > MAX_DESCRIPCION:
+            raise ValidationError(
+                f"La descripción no puede superar {MAX_DESCRIPCION} caracteres", "descripcion"
+            )
+        self.imagen_url = (self.imagen_url or "").strip() or None
+        if self.imagen_url:
+            # Sólo http(s): se pinta en un <img>, y un "javascript:" no debe llegar ahí.
+            if not self.imagen_url.lower().startswith(("http://", "https://")):
+                raise ValidationError("La imagen debe ser una URL http(s)", "imagen_url")
+            if len(self.imagen_url) > MAX_URL_IMAGEN:
+                raise ValidationError(
+                    f"La URL de la imagen no puede superar {MAX_URL_IMAGEN} caracteres",
+                    "imagen_url",
+                )
 
     @property
     def disponible_para_adopcion(self) -> bool:

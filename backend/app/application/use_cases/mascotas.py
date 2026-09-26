@@ -77,6 +77,8 @@ class RegistrarMascotaCmd:
     peso: float = 1.0
     esta_esterilizado: bool = False
     estado_adopcion: str = EstadoAdopcion.NORMAL.value
+    descripcion: str | None = None
+    imagen_url: str | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -92,6 +94,8 @@ class ActualizarMascotaCmd:
     esta_esterilizado: Cambio[bool | None] = SIN_CAMBIO
     estado_adopcion: Cambio[str | None] = SIN_CAMBIO
     activo: Cambio[bool | None] = SIN_CAMBIO
+    descripcion: Cambio[str | None] = SIN_CAMBIO
+    imagen_url: Cambio[str | None] = SIN_CAMBIO
 
 
 class ConsultarMascotas:
@@ -147,6 +151,7 @@ class ConsultarMascotas:
                     especie_nombre=especies.get(mascota.especie_id, ""),
                     cliente_nombre=cliente.nombre_completo if cliente else None,
                     cliente_email=cliente.email if cliente else None,
+                    cliente_telefono=cliente.telefono if cliente else None,
                 )
             )
         return vistas
@@ -189,6 +194,8 @@ class RegistrarMascota:
             peso=cmd.peso,
             esta_esterilizado=cmd.esta_esterilizado,
             estado_adopcion=cmd.estado_adopcion,
+            descripcion=cmd.descripcion,
+            imagen_url=cmd.imagen_url,
             fecha_registro=self.reloj.hoy(),
         )
         return self.mascotas.crear(mascota)
@@ -238,6 +245,8 @@ class ActualizarMascota:
             activo=nuevo(cmd.activo, actual.activo),
             fecha_registro=actual.fecha_registro,
             estado_adopcion=nuevo(cmd.estado_adopcion, actual.estado_adopcion),
+            descripcion=nuevo_o_vacio(cmd.descripcion, actual.descripcion),
+            imagen_url=nuevo_o_vacio(cmd.imagen_url, actual.imagen_url),
         )
         return self.mascotas.actualizar(actualizada)
 

@@ -32,14 +32,18 @@ class MascotaVista:
     especie_nombre: str = ""
     cliente_nombre: str | None = None
     cliente_email: str | None = None
+    cliente_telefono: str | None = None
 
 
 @dataclass
 class SolicitudVista:
     solicitud: SolicitudAdopcion
     mascota_nombre: str = ""
+    mascota_raza: str | None = None
+    mascota_imagen_url: str | None = None
     cliente_nombre: str = ""
     cliente_email: str = ""
+    cliente_telefono: str | None = None
     revisor_nombre: str | None = None
 
 
@@ -60,8 +64,12 @@ class DisponibilidadVista:
 class CitaVista:
     cita: Cita
     mascota_nombre: str = ""
+    mascota_raza: str | None = None
+    mascota_imagen_url: str | None = None
     cliente_id: int | None = None
     cliente_nombre: str | None = None
+    cliente_email: str | None = None
+    cliente_telefono: str | None = None
     veterinario_nombre: str = ""
     servicio_nombre: str = ""
     estado_nombre: str = ""
@@ -74,6 +82,7 @@ class HistorialVista:
     mascota_id: int | None = None
     cliente_id: int | None = None
     mascota_nombre: str = ""
+    mascota_raza: str | None = None
     veterinario_nombre: str = ""
     fecha_cita: datetime | None = None
 
@@ -116,6 +125,7 @@ class EstadisticasDashboard:
     solicitudes_pendientes: int = 0
     citas_hoy: int = 0
     citas_totales: int = 0
+    citas_activas: int = 0
     total_productos: int = 0
     productos_stock_bajo: int = 0
     productos_por_vencer: int = 0

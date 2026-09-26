@@ -76,6 +76,7 @@ class ConsultarHistoriales:
             mascota_id=mascota.id if mascota else None,
             cliente_id=mascota.cliente_id if mascota else None,
             mascota_nombre=mascota.nombre if mascota else "",
+            mascota_raza=mascota.raza if mascota else None,
             veterinario_nombre=veterinario.nombre_completo if veterinario else "",
             fecha_cita=cita.fecha_hora if cita else None,
         )

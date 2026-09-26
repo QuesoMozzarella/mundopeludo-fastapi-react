@@ -303,7 +303,7 @@ export const AdopcionesView: React.FC<AdopcionesViewProps> = ({
             <form onSubmit={handleApplySubmit} className="p-6 space-y-4">
               <div className="flex items-center gap-4 p-3 bg-rose-50 rounded-2xl border border-rose-100">
                 <img 
-                  src={selectedPetForAdoption.imagen_url} 
+                  src={selectedPetForAdoption.imagen_url || '/img/default-pet.jpg'} 
                   alt={selectedPetForAdoption.nombre} 
                   className="w-14 h-14 rounded-xl object-cover"
                 />

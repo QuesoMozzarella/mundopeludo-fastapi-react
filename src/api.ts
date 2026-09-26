@@ -135,6 +135,9 @@ function aMascota(m: Json): Mascota {
     tutor_nombre: m.cliente_nombre ?? undefined,
     tutor_apellidos: '',
     tutor_email: m.cliente_email ?? undefined,
+    tutor_telefono: m.cliente_telefono ?? undefined,
+    descripcion: m.descripcion ?? undefined,
+    imagen_url: m.imagen_url ?? undefined,
     activo: num(m.activo)
   } as Mascota;
 }
@@ -149,6 +152,10 @@ function aCita(c: Json): Cita {
     notas: c.notas ?? undefined,
     tutor_nombre: c.cliente_nombre ?? '',
     tutor_apellidos: '',
+    tutor_email: c.cliente_email ?? undefined,
+    tutor_telefono: c.cliente_telefono ?? undefined,
+    mascota_raza: c.mascota_raza ?? undefined,
+    mascota_imagen: c.mascota_imagen_url ?? undefined,
     vet_nombre: c.veterinario_nombre,
     vet_apellidos: '',
     servicio_precio: 0
@@ -159,6 +166,7 @@ function aHistorial(h: Json): HistorialMedico {
   return {
     ...h,
     observaciones: h.observaciones ?? undefined,
+    mascota_raza: h.mascota_raza ?? undefined,
     vet_nombre: h.veterinario_nombre,
     vet_apellidos: '',
     cita_fecha: h.fecha_cita ?? undefined
@@ -169,6 +177,9 @@ function aSolicitud(s: Json): SolicitudAdopcion {
   return {
     ...s,
     cliente_apellidos: '',
+    cliente_telefono: s.cliente_telefono ?? undefined,
+    mascota_raza: s.mascota_raza ?? undefined,
+    mascota_imagen: s.mascota_imagen_url ?? undefined,
     revisado_por: s.revisado_por_id ?? undefined,
     revisor_nombre: s.revisor_nombre ?? undefined
   } as SolicitudAdopcion;
@@ -178,6 +189,8 @@ function aProducto(p: Json): Producto {
   return {
     ...p,
     peso: p.peso ?? 0,
+    // La API guarda las imágenes subidas y las sirve en /api/imagenes/{id}.
+    imagen_url: p.imagenes_ids?.length ? `${API_BASE}/imagenes/${p.imagenes_ids[0]}` : undefined,
     disponible_online: num(p.disponible_online),
     activo: num(p.activo)
   } as Producto;
@@ -187,6 +200,7 @@ function aEstadisticas(s: Json): DashboardStats {
   return {
     total_mascotas: s.total_mascotas,
     total_citas: s.citas_totales,
+    citas_activas: s.citas_activas,
     citas_hoy: s.citas_hoy,
     mascotas_adopcion: s.mascotas_en_adopcion,
     solicitudes_pendientes: s.solicitudes_pendientes,

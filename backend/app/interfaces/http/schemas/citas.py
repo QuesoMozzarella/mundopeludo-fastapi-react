@@ -134,8 +134,12 @@ class CitaOut(BaseModel):
     id: int
     mascota_id: int
     mascota_nombre: str
+    mascota_raza: str | None = None
+    mascota_imagen_url: str | None = None
     cliente_id: int | None = None
     cliente_nombre: str | None = None
+    cliente_email: str | None = None
+    cliente_telefono: str | None = None
     veterinario_id: int
     veterinario_nombre: str
     servicio_id: int
@@ -155,8 +159,12 @@ class CitaOut(BaseModel):
             id=c.id,
             mascota_id=c.mascota_id,
             mascota_nombre=vista.mascota_nombre,
+            mascota_raza=vista.mascota_raza,
+            mascota_imagen_url=vista.mascota_imagen_url,
             cliente_id=vista.cliente_id,
             cliente_nombre=vista.cliente_nombre,
+            cliente_email=vista.cliente_email,
+            cliente_telefono=vista.cliente_telefono,
             veterinario_id=c.veterinario_id,
             veterinario_nombre=vista.veterinario_nombre,
             servicio_id=c.servicio_id,
@@ -194,6 +202,7 @@ class HistorialOut(BaseModel):
     cita_id: int | None = None
     mascota_id: int
     mascota_nombre: str
+    mascota_raza: str | None = None
     veterinario_id: int
     veterinario_nombre: str
     diagnostico: str
@@ -210,6 +219,7 @@ class HistorialOut(BaseModel):
             cita_id=h.cita_id,
             mascota_id=h.mascota_id,
             mascota_nombre=vista.mascota_nombre,
+            mascota_raza=vista.mascota_raza,
             veterinario_id=h.veterinario_id,
             veterinario_nombre=vista.veterinario_nombre,
             diagnostico=h.diagnostico,

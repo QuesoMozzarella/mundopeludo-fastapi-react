@@ -5,6 +5,7 @@ from ...domain.model.sistema import ActividadSistema
 from ...domain.ports.repositories import (
     ActividadSistemaRepository,
     CitaRepository,
+    EstadoCitaRepository,
     HistorialMedicoRepository,
     MascotaRepository,
     PedidoRepository,
@@ -15,6 +16,9 @@ from ...domain.ports.repositories import (
 from ...domain.ports.services import Clock
 from ...domain.value_objects import EstadoAdopcion, EstadoSolicitud, TipoUsuario
 from ..read_models import EstadisticasDashboard
+
+# Estados de cita que cuentan como "activas" en el panel.
+ESTADOS_ACTIVOS = ("Pendiente", "Confirmada")
 
 
 class RegistrarActividad:
@@ -50,6 +54,7 @@ class ObtenerEstadisticas:
         historiales: HistorialMedicoRepository,
         productos: ProductoRepository,
         pedidos: PedidoRepository,
+        estados: EstadoCitaRepository,
         reloj: Clock,
     ):
         self.usuarios = usuarios
@@ -59,6 +64,7 @@ class ObtenerEstadisticas:
         self.historiales = historiales
         self.productos = productos
         self.pedidos = pedidos
+        self.estados = estados
         self.reloj = reloj
 
     def ejecutar(self) -> EstadisticasDashboard:
@@ -76,9 +82,19 @@ class ObtenerEstadisticas:
             ),
             citas_hoy=self.citas.contar(dia=self.reloj.hoy()),
             citas_totales=self.citas.contar(),
+            citas_activas=self._citas_activas(),
             total_productos=len(catalogo),
             productos_stock_bajo=sum(1 for p in catalogo if p.stock_bajo),
             productos_por_vencer=sum(1 for p in catalogo if p.proximo_a_vencer(self.reloj.hoy())),
             historiales_registrados=len(self.historiales.listar()),
             ingresos_totales=self.pedidos.total_ingresos(),
         )
+
+    def _citas_activas(self) -> int:
+        """Citas que aún van a ocurrir: pendientes o confirmadas."""
+        total = 0
+        for nombre in ESTADOS_ACTIVOS:
+            estado = self.estados.obtener_por_nombre(nombre)
+            if estado is not None:
+                total += self.citas.contar(estado_id=estado.id)
+        return total

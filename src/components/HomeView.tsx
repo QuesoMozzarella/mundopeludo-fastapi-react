@@ -303,7 +303,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
           <div className="w-48 h-48 sm:w-64 sm:h-64 rounded-2xl overflow-hidden shadow-2xl border-4 border-white/40 shrink-0 bg-white">
             <img 
-              src={mascotasAdopcion[0].imagen_url} 
+              src={mascotasAdopcion[0].imagen_url || '/img/default-pet.jpg'} 
               alt={mascotasAdopcion[0].nombre} 
               className="w-full h-full object-cover"
               onError={(e) => {
@@ -339,7 +339,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
               <div>
                 <div className="w-full h-44 rounded-xl overflow-hidden bg-slate-100 mb-3 relative">
                   <img 
-                    src={p.imagen_url} 
+                    src={p.imagen_url || '/img/producto-default.jpg'} 
                     alt={p.nombre} 
                     className="w-full h-full object-cover"
                     onError={(e) => {
