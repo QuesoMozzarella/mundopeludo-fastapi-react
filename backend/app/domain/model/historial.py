@@ -16,12 +16,18 @@ def _requerido(valor: str, campo: str) -> str:
 
 @dataclass
 class HistorialMedico:
-    """HistorialMedico: ficha clinica 1-1 con una cita."""
+    """HistorialMedico: ficha clínica de una mascota.
 
-    cita_id: int
+    En Django era 1-1 con una cita; aquí la cita es opcional porque también se
+    registran consultas sin cita previa (urgencias, visitas espontáneas). Si hay
+    cita, sigue siendo 1-1: una cita tiene como mucho un historial.
+    """
+
+    mascota_id: int
     veterinario_id: int
     diagnostico: str
     tratamiento: str
+    cita_id: int | None = None
     observaciones: str | None = None
     fecha_creacion: datetime = field(default_factory=datetime.now)
     id: int | None = None
@@ -30,8 +36,8 @@ class HistorialMedico:
         self.diagnostico = _requerido(self.diagnostico, "diagnostico")
         self.tratamiento = _requerido(self.tratamiento, "tratamiento")
         self.observaciones = (self.observaciones or "").strip() or None
-        if self.cita_id is None:
-            raise ValidationError("El historial debe estar asociado a una cita", "cita_id")
+        if self.mascota_id is None:
+            raise ValidationError("El historial debe estar asociado a una mascota", "mascota_id")
 
     def actualizar(
         self,

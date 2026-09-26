@@ -172,7 +172,11 @@ class CitaOut(BaseModel):
 
 
 class HistorialIn(BaseModel):
-    cita_id: int
+    """Con `cita_id` la mascota sale de la cita; sin ella, `mascota_id` y
+    `veterinario_id` son obligatorios."""
+
+    cita_id: int | None = None
+    mascota_id: int | None = None
     diagnostico: str = Field(min_length=3)
     tratamiento: str = Field(min_length=3)
     observaciones: str | None = None
@@ -187,8 +191,8 @@ class HistorialActualizarIn(BaseModel):
 
 class HistorialOut(BaseModel):
     id: int
-    cita_id: int
-    mascota_id: int | None = None
+    cita_id: int | None = None
+    mascota_id: int
     mascota_nombre: str
     veterinario_id: int
     veterinario_nombre: str
@@ -204,7 +208,7 @@ class HistorialOut(BaseModel):
         return cls(
             id=h.id,
             cita_id=h.cita_id,
-            mascota_id=vista.mascota_id,
+            mascota_id=h.mascota_id,
             mascota_nombre=vista.mascota_nombre,
             veterinario_id=h.veterinario_id,
             veterinario_nombre=vista.veterinario_nombre,

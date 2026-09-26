@@ -5,6 +5,8 @@ encuentran; el dominio nunca importa nada de aquí.
 """
 from __future__ import annotations
 
+import logging
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -23,6 +25,8 @@ from .interfaces.http.routers import (
     usuarios,
 )
 
+log = logging.getLogger("mundopeludo")
+
 DESCRIPCION = """
 API de la Clínica Veterinaria **MundoPeludo**.
 
@@ -39,6 +43,10 @@ Migración del backend Django original a **FastAPI + sqlite3** siguiendo
 def create_app(configuracion: Config | None = None) -> FastAPI:
     configuracion = configuracion or config_global
     configuracion.validar()
+    if not configuracion.exigir_auth:
+        log.warning("MP_REQUIRE_AUTH=0: la API está ABIERTA, sin token ni permisos")
+    if not configuracion.correo_configurado:
+        log.warning("MP_EMAIL_HOST vacío: los códigos de recuperación no se envían por correo")
     contenedor = Contenedor(configuracion)
     contenedor.preparar()
 

@@ -22,11 +22,22 @@ class Config:
     secreto_jwt: str = field(default_factory=lambda: os.getenv("MP_SECRET_KEY", SECRETO_DESARROLLO))
     minutos_token: int = field(default_factory=lambda: int(os.getenv("MP_TOKEN_MINUTES", "720")))
     origenes_cors: list[str] = field(default_factory=lambda: [o for o in os.getenv("MP_CORS_ORIGINS", "*").split(",") if o])
-    # Con `MP_REQUIRE_AUTH=1` los endpoints de escritura exigen token y rol.
-    # Por defecto queda en 0 para no romper al cliente SPA existente, que aún
-    # no envía cabecera Authorization.
-    exigir_auth: bool = field(default_factory=lambda: _bool("MP_REQUIRE_AUTH", False))
+    # La API está cerrada por defecto: token, rol y propiedad del recurso.
+    # `MP_REQUIRE_AUTH=0` la abre por completo; sólo para desarrollo local.
+    exigir_auth: bool = field(default_factory=lambda: _bool("MP_REQUIRE_AUTH", True))
     entorno: str = field(default_factory=lambda: os.getenv("MP_ENV", "desarrollo"))
+
+    # Correo saliente (el EMAIL_* de settings.py). Sin host no se envía nada.
+    correo_host: str = field(default_factory=lambda: os.getenv("MP_EMAIL_HOST", ""))
+    correo_puerto: int = field(default_factory=lambda: int(os.getenv("MP_EMAIL_PORT", "587")))
+    correo_tls: bool = field(default_factory=lambda: _bool("MP_EMAIL_USE_TLS", True))
+    correo_usuario: str = field(default_factory=lambda: os.getenv("MP_EMAIL_USER", ""))
+    correo_password: str = field(default_factory=lambda: os.getenv("MP_EMAIL_PASSWORD", ""))
+    correo_remitente: str = field(default_factory=lambda: os.getenv("MP_EMAIL_FROM", ""))
+
+    @property
+    def correo_configurado(self) -> bool:
+        return bool(self.correo_host)
 
     @property
     def es_produccion(self) -> bool:

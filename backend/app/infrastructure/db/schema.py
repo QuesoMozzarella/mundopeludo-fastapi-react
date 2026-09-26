@@ -175,15 +175,19 @@ CREATE INDEX IF NOT EXISTS idx_citas_vet ON citas(veterinario_id);
 -- ===================== historiales_medicos.HistorialMedico =====================
 CREATE TABLE IF NOT EXISTS historiales_medicos (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,
-    cita_id        INTEGER NOT NULL UNIQUE,
+    mascota_id     INTEGER NOT NULL,
+    cita_id        INTEGER UNIQUE,
     veterinario_id INTEGER NOT NULL,
     diagnostico    TEXT    NOT NULL,
     tratamiento    TEXT    NOT NULL,
     observaciones  TEXT,
     fecha_creacion TEXT    NOT NULL,
-    FOREIGN KEY (cita_id)        REFERENCES citas(id)    ON DELETE CASCADE,
+    FOREIGN KEY (mascota_id)     REFERENCES mascotas(id) ON DELETE CASCADE,
+    -- Borrar la cita no borra la ficha clínica: sólo pierde el vínculo.
+    FOREIGN KEY (cita_id)        REFERENCES citas(id)    ON DELETE SET NULL,
     FOREIGN KEY (veterinario_id) REFERENCES usuarios(id) ON DELETE CASCADE
 );
+CREATE INDEX IF NOT EXISTS idx_historiales_mascota ON historiales_medicos(mascota_id);
 
 -- ===================== inventario.Producto =====================
 CREATE TABLE IF NOT EXISTS productos (
@@ -289,6 +293,50 @@ CREATE TABLE IF NOT EXISTS codigos_recuperacion (
 );
 CREATE INDEX IF NOT EXISTS idx_codigos_usuario ON codigos_recuperacion(usuario_id);
 """
+
+
+def _columnas(conn, tabla: str) -> set[str]:
+    return {fila[1] for fila in conn.execute(f"PRAGMA table_info({tabla})")}
+
+
+# Migraciones de bases creadas con versiones anteriores del esquema. Se
+# ejecutan antes del DDL y detectan por columnas si hace falta aplicarlas, así
+# que son idempotentes.
+MIGRACION_HISTORIAL_SIN_CITA = """
+PRAGMA foreign_keys = OFF;
+BEGIN;
+CREATE TABLE historiales_medicos_v2 (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    mascota_id     INTEGER NOT NULL,
+    cita_id        INTEGER UNIQUE,
+    veterinario_id INTEGER NOT NULL,
+    diagnostico    TEXT    NOT NULL,
+    tratamiento    TEXT    NOT NULL,
+    observaciones  TEXT,
+    fecha_creacion TEXT    NOT NULL,
+    FOREIGN KEY (mascota_id)     REFERENCES mascotas(id) ON DELETE CASCADE,
+    FOREIGN KEY (cita_id)        REFERENCES citas(id)    ON DELETE SET NULL,
+    FOREIGN KEY (veterinario_id) REFERENCES usuarios(id) ON DELETE CASCADE
+);
+INSERT INTO historiales_medicos_v2
+    (id, mascota_id, cita_id, veterinario_id, diagnostico, tratamiento,
+     observaciones, fecha_creacion)
+SELECT h.id, c.mascota_id, h.cita_id, h.veterinario_id, h.diagnostico,
+       h.tratamiento, h.observaciones, h.fecha_creacion
+FROM historiales_medicos h JOIN citas c ON c.id = h.cita_id;
+DROP TABLE historiales_medicos;
+ALTER TABLE historiales_medicos_v2 RENAME TO historiales_medicos;
+COMMIT;
+PRAGMA foreign_keys = ON;
+"""
+
+
+def migrar(conn) -> None:
+    """Pone al día una base existente antes de aplicar el DDL."""
+    historiales = _columnas(conn, "historiales_medicos")
+    if historiales and "mascota_id" not in historiales:
+        # v1 → v2: la cita del historial pasa a ser opcional.
+        conn.executescript(MIGRACION_HISTORIAL_SIN_CITA)
 
 
 # Catálogos imprescindibles para que la API arranque usable.

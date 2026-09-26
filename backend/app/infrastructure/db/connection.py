@@ -12,7 +12,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Iterator
 
-from .schema import DDL, SEMILLA_MINIMA
+from .schema import DDL, SEMILLA_MINIMA, migrar
 
 # SQLite no sabe guardar estos tipos: se serializan en texto ISO / decimal.
 sqlite3.register_adapter(datetime, lambda v: v.replace(microsecond=0).isoformat(sep=" "))
@@ -75,6 +75,7 @@ class Database:
     def crear_esquema(self) -> None:
         conn = self.conectar()
         try:
+            migrar(conn)
             conn.executescript(DDL)
             for sentencia, parametros in SEMILLA_MINIMA:
                 conn.executemany(sentencia, parametros)

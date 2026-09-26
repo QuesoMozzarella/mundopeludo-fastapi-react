@@ -7,6 +7,7 @@ persistencia en **sqlite3 sin ORM**, organizada en **puertos y adaptadores**.
 backend/
 ├── main.py                     # entrada ASGI: uvicorn backend.main:app
 ├── seed.py                     # datos de ejemplo (usa los casos de uso)
+├── crear_superusuario.py       # alta de administradores por consola
 ├── requirements.txt
 ├── data/                       # la base SQLite vive aquí (ignorada por git)
 ├── app/
@@ -46,14 +47,35 @@ SQLite por PostgreSQL significa escribir otros repositorios y una línea en
 ```bash
 pip install -r backend/requirements.txt
 
-python backend/seed.py                       # datos de ejemplo (opcional)
-uvicorn backend.main:app --reload --port 8000
+cp .env.example .env                         # y rellena los valores
+python backend/crear_superusuario.py         # primer administrador
+uvicorn backend.main:app --reload --port 8001
 ```
 
-* Swagger: <http://localhost:8000/docs>
-* ReDoc: <http://localhost:8000/redoc>
+* Swagger: <http://localhost:8001/docs>
+* ReDoc: <http://localhost:8001/redoc>
+
+La API arranca **cerrada**: todo lo que no sea público (catálogos, productos,
+mascotas en adopción, registro de clientes, login y recuperación de
+contraseña) exige un token `Bearer`. Como el registro público sólo crea
+clientes, el primer administrador se crea por consola, igual que
+`manage.py createsuperuser`:
+
+```bash
+python backend/crear_superusuario.py                     # pregunta los datos
+python backend/crear_superusuario.py --email admin@mundopeludo.com --nombre Ana --apellidos Ruiz
+```
+
+Desde esa cuenta se crean los veterinarios y otros administradores con
+`POST /api/auth/register` enviando el token del administrador.
+
+`main.py`, `seed.py` y `crear_superusuario.py` leen el `.env` de la raíz del
+repositorio (sin pisar variables ya definidas en el entorno). Ese archivo está
+en `.gitignore`: las credenciales nunca van al repositorio.
 
 ### Credenciales de ejemplo (tras `seed.py`)
+
+> `seed.py` crea cuentas con una contraseña conocida: úsalo sólo en desarrollo.
 
 | Rol | Correo | Contraseña |
 |---|---|---|
@@ -69,8 +91,13 @@ uvicorn backend.main:app --reload --port 8000
 | `MP_SECRET_KEY` | clave de desarrollo | Firma de los JWT. **Obligatoria en producción**: la app no arranca con la de desarrollo |
 | `MP_TOKEN_MINUTES` | `720` | Vigencia del token |
 | `MP_CORS_ORIGINS` | `*` | Orígenes permitidos, separados por coma |
-| `MP_REQUIRE_AUTH` | `0` | `1` exige token, rol y propiedad del recurso (ver *Autenticación*) |
-| `MP_ENV` | `desarrollo` | En producción oculta el código de recuperación |
+| `MP_REQUIRE_AUTH` | `1` | API cerrada: token, rol y propiedad del recurso (ver *Autenticación*). `0` la abre por completo |
+| `MP_ENV` | `desarrollo` | `produccion` activa las comprobaciones de arranque |
+| `MP_EMAIL_HOST` | vacío | Servidor SMTP (`smtp.gmail.com`). Vacío: no se envían correos |
+| `MP_EMAIL_PORT` | `587` | Puerto SMTP. Con `465` se usa SSL directo |
+| `MP_EMAIL_USE_TLS` | `1` | STARTTLS en puertos distintos de 465 |
+| `MP_EMAIL_USER` / `MP_EMAIL_PASSWORD` | vacío | Credenciales SMTP. En Gmail, una *contraseña de aplicación* |
+| `MP_EMAIL_FROM` | `MP_EMAIL_USER` | Remitente visible |
 
 ---
 
@@ -91,7 +118,7 @@ Los **15 modelos** del proyecto original están cubiertos:
 | `citas` | `Servicio` | `model/cita.py: Servicio` | `servicios` + `servicio_veterinarios` + `servicio_especialidades` |
 | `citas` | `Disponibilidad` | `model/cita.py: Disponibilidad` | `disponibilidades` |
 | `citas` | `Cita` | `model/cita.py: Cita` | `citas` |
-| `historiales_medicos` | `HistorialMedico` | `model/historial.py` | `historiales_medicos` |
+| `historiales_medicos` | `HistorialMedico` | `model/historial.py` (cita opcional, ver abajo) | `historiales_medicos` |
 | `inventario` | `Producto` | `model/inventario.py: Producto` | `productos` |
 | `inventario` | `ImagenProducto` | `model/inventario.py: ImagenProducto` | `imagenes_producto` |
 | `inventario` | `Carrito` / `CarritoItem` | `model/inventario.py: Carrito`, `CarritoItem` | `carritos`, `carrito_items` |
@@ -126,21 +153,36 @@ Los **15 modelos** del proyecto original están cubiertos:
 * **`Pedido` / `PedidoItem` son una extensión**: no existían en Django, pero el
   endpoint `/api/checkout` de la API actual los necesita para registrar la
   compra y descontar stock.
+* **Historial médico sin cita**: en Django era 1-1 obligatorio con una cita.
+  Aquí pertenece a la mascota y la cita es opcional (urgencias, visitas sin
+  agendar). Con cita, la mascota y el veterinario salen de ella y la cita pasa
+  a `Completada`; sin cita hay que indicar `mascota_id` y `veterinario_id`.
+  Borrar una cita no borra su ficha clínica: sólo pierde el vínculo. Las bases
+  creadas antes se migran solas al arrancar (`schema.migrar`).
 * **Autenticación**: se sustituye la sesión con cookie + CSRF de Django por JWT
-  `Bearer`. Con `MP_REQUIRE_AUTH=0` (valor por defecto) las escrituras siguen
-  abiertas para no romper al cliente SPA existente, que todavía no envía la
-  cabecera `Authorization`. **Ese modo es abierto**: cualquiera puede leer y
-  modificar cualquier dato, así que sólo sirve para desarrollo local. Con
-  `MP_REQUIRE_AUTH=1` se exigen token y rol, y además:
+  `Bearer`. Con `MP_REQUIRE_AUTH=1` (valor por defecto) se exigen token y rol,
+  y además:
   * el registro público sólo crea clientes; las cuentas de veterinario y de
-    administrador las crea un administrador (o `seed.py`);
+    administrador las crea un administrador (el primero, con
+    `crear_superusuario.py`);
   * un cliente sólo ve y modifica lo suyo: su usuario, carrito, pedidos,
     mascotas, citas, historiales y solicitudes de adopción. En los listados se
     le filtra automáticamente;
   * cambiar el rol o dar de baja una cuenta, transferir una mascota o
     publicarla en adopción, y consultar usuarios, bitácora o panel quedan
     reservados al personal;
-  * quien aprueba o rechaza una adopción firma con su propio `revisor_id`.
+  * quien aprueba o rechaza una adopción, o firma un historial, lo hace con
+    su propio id.
+
+  `MP_REQUIRE_AUTH=0` abre la API por completo (cualquiera lee y modifica
+  cualquier dato); sólo sirve para desarrollo local y la app lo avisa al
+  arrancar.
+* **Correo**: el `EMAIL_BACKEND` SMTP de Django se sustituye por el puerto
+  `Notificaciones` y su adaptador `CorreoSmtp` (`smtplib`, sin dependencias).
+  Hoy envía el código de recuperación de contraseña con la misma plantilla que
+  la vista de Django. Si el envío falla, la API responde 503 y no deja un código
+  activo. Sin `MP_EMAIL_HOST` no se envía nada y, fuera de producción, el código
+  vuelve en `codigo_debug` para poder probar.
 * **Imágenes de producto**: se suben en base64 dentro del JSON
   (`POST /api/productos/{id}/imagenes`) en vez de `multipart/form-data`, para no
   depender de `python-multipart`. Los bytes se guardan en la base, igual que el

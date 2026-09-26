@@ -4,6 +4,9 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from datetime import date, datetime
 
+from ..model.sistema import CodigoRecuperacion
+from ..model.usuario import Usuario
+
 
 class PasswordHasher(ABC):
     """Reemplaza a `user.set_password()` / `check_password()` de Django."""
@@ -39,6 +42,17 @@ class Clock(ABC):
 
     def hoy(self) -> date:
         return self.ahora().date()
+
+
+class Notificaciones(ABC):
+    """Avisos a los usuarios. Hoy salen por correo; el dominio no lo sabe.
+
+    Si el aviso no puede entregarse, la implementación lanza
+    `ServicioNoDisponibleError`.
+    """
+
+    @abstractmethod
+    def codigo_recuperacion(self, usuario: Usuario, codigo: CodigoRecuperacion) -> None: ...
 
 
 class GeneradorCodigos(ABC):

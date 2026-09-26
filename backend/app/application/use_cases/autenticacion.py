@@ -23,7 +23,13 @@ from ...domain.ports.repositories import (
     PerfilVeterinarioRepository,
     UsuarioRepository,
 )
-from ...domain.ports.services import Clock, GeneradorCodigos, PasswordHasher, TokenService
+from ...domain.ports.services import (
+    Clock,
+    GeneradorCodigos,
+    Notificaciones,
+    PasswordHasher,
+    TokenService,
+)
 from ...domain.value_objects import TipoUsuario
 
 LONGITUD_MINIMA_PASSWORD = 8
@@ -176,7 +182,11 @@ class ObtenerUsuarioDesdeToken:
 
 
 class SolicitarCodigoRecuperacion:
-    """Genera el código de 6 dígitos del modelo `CodigoRecuperacion`."""
+    """Genera el código de 6 dígitos del modelo `CodigoRecuperacion` y lo envía.
+
+    Si el aviso falla, la excepción deshace la transacción: no queda un código
+    activo que el usuario nunca recibió.
+    """
 
     def __init__(
         self,
@@ -184,11 +194,13 @@ class SolicitarCodigoRecuperacion:
         codigos: CodigoRecuperacionRepository,
         generador: GeneradorCodigos,
         reloj: Clock,
+        notificaciones: Notificaciones,
     ):
         self.usuarios = usuarios
         self.codigos = codigos
         self.generador = generador
         self.reloj = reloj
+        self.notificaciones = notificaciones
 
     def ejecutar(self, email: str) -> CodigoRecuperacion | None:
         usuario = self.usuarios.obtener_por_email(email)
@@ -201,7 +213,9 @@ class SolicitarCodigoRecuperacion:
             codigo=self.generador.numerico(6),
             fecha_creacion=self.reloj.ahora(),
         )
-        return self.codigos.crear(codigo)
+        codigo = self.codigos.crear(codigo)
+        self.notificaciones.codigo_recuperacion(usuario, codigo)
+        return codigo
 
 
 class RestablecerPassword:

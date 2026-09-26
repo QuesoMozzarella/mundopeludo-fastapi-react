@@ -15,6 +15,7 @@ from ...domain.errors import (
     ConflictError,
     DomainError,
     NotFoundError,
+    ServicioNoDisponibleError,
     ValidationError,
 )
 
@@ -28,6 +29,7 @@ CODIGOS = {
     BusinessRuleError: status.HTTP_409_CONFLICT,
     AuthenticationError: status.HTTP_401_UNAUTHORIZED,
     AuthorizationError: status.HTTP_403_FORBIDDEN,
+    ServicioNoDisponibleError: status.HTTP_503_SERVICE_UNAVAILABLE,
 }
 
 

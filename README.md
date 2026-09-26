@@ -108,8 +108,9 @@ tabla SQLite y las diferencias deliberadas, está en
 [`backend/README.md`](./backend/README.md).
 
 ```bash
-python backend/seed.py            # datos de ejemplo
-python backend/tests/test_api.py  # 14 pruebas end-to-end, sin dependencias extra
+python backend/crear_superusuario.py  # primer administrador (la API arranca cerrada)
+python backend/seed.py                # datos de ejemplo, sólo desarrollo
+python backend/tests/test_api.py      # pruebas end-to-end, sin dependencias extra
 ```
 
 ---

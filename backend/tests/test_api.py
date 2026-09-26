@@ -16,7 +16,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from app.application.use_cases.autenticacion import RegistrarUsuario  # noqa: E402
 from app.bootstrap import create_app  # noqa: E402
-from app.config import Config  # noqa: E402
+from app.config import SECRETO_DESARROLLO, Config  # noqa: E402
 from cliente import crear_cliente  # noqa: E402
 
 PASSWORD = "mundopeludo2025"
@@ -24,14 +24,18 @@ PASSWORD = "mundopeludo2025"
 
 def nuevo_cliente():
     ruta = os.path.join(tempfile.mkdtemp(prefix="mundopeludo-test-"), "prueba.db")
-    app = create_app(Config(ruta_bd=ruta, secreto_jwt="secreto-de-prueba", exigir_auth=False))
+    app = create_app(
+        Config(ruta_bd=ruta, secreto_jwt="secreto-de-prueba", exigir_auth=False, correo_host="")
+    )
     return crear_cliente(app)
 
 
 def cliente_con_auth():
     """App con `MP_REQUIRE_AUTH=1`; devuelve también la app para sembrar datos."""
     ruta = os.path.join(tempfile.mkdtemp(prefix="mundopeludo-auth-"), "prueba.db")
-    app = create_app(Config(ruta_bd=ruta, secreto_jwt="secreto", exigir_auth=True))
+    app = create_app(
+        Config(ruta_bd=ruta, secreto_jwt="secreto", exigir_auth=True, correo_host="")
+    )
     return app, crear_cliente(app)
 
 
@@ -825,12 +829,204 @@ def test_contrato_del_cliente_spa():
 
 def test_produccion_exige_clave_propia():
     try:
-        create_app(Config(ruta_bd=":memory:", entorno="produccion"))
+        create_app(Config(ruta_bd=":memory:", entorno="produccion", secreto_jwt=SECRETO_DESARROLLO))
     except RuntimeError:
         pass
     else:
         raise AssertionError("arrancó en producción con la clave JWT de desarrollo")
     create_app(Config(ruta_bd=":memory:", entorno="produccion", secreto_jwt="clave-propia"))
+
+
+def test_historial_sin_cita():
+    cli = nuevo_cliente()
+    vet = _crear(cli, "hist-vet@test.com", "veterinario")
+    tutor = _crear(cli, "hist-tutor@test.com")
+    especie = cli.get("/api/especies").json()[0]
+    mascota = cli.post(
+        "/api/mascotas",
+        {"cliente_id": tutor["id"], "especie_id": especie["id"], "nombre": "Lola",
+         "sexo": "Hembra", "color": "blanco"},
+    ).json()
+    ficha = {"diagnostico": "Otitis leve", "tratamiento": "Gotas óticas 7 días"}
+
+    # Urgencia sin cita previa: como la manda el frontend (cita_id null).
+    sin_cita = cli.post(
+        "/api/historiales-medicos",
+        {**ficha, "cita_id": None, "mascota_id": mascota["id"], "veterinario_id": vet["id"]},
+    )
+    assert sin_cita.status == 201, sin_cita
+    assert sin_cita.json()["cita_id"] is None
+    assert sin_cita.json()["mascota_nombre"] == "Lola"
+    por_mascota = cli.get("/api/historiales-medicos", params={"mascota_id": mascota["id"]})
+    assert [h["id"] for h in por_mascota.json()] == [sin_cita.json()["id"]]
+    por_cliente = cli.get("/api/historiales-medicos", params={"cliente_id": tutor["id"]})
+    assert len(por_cliente.json()) == 1
+
+    # Sin cita hacen falta la mascota y quien firma.
+    assert cli.post("/api/historiales-medicos", {**ficha, "veterinario_id": vet["id"]}).status == 422
+    assert cli.post("/api/historiales-medicos", {**ficha, "mascota_id": mascota["id"]}).status == 422
+    assert cli.post(
+        "/api/historiales-medicos",
+        {**ficha, "mascota_id": 9999, "veterinario_id": vet["id"]},
+    ).status == 404
+
+    # Con cita: la mascota sale de ella y la cita queda Completada.
+    servicio = cli.post(
+        "/api/servicios", {"nombre": "Otología", "descripcion": "Oídos", "veterinarios_ids": [vet["id"]]}
+    ).json()
+    manana = (datetime.now() + timedelta(days=1)).replace(hour=12, minute=0, second=0, microsecond=0)
+    cita = cli.post(
+        "/api/citas",
+        {"mascota_id": mascota["id"], "veterinario_id": vet["id"], "servicio_id": servicio["id"],
+         "fecha_hora": manana.isoformat(), "motivo": "Revisión de oídos"},
+    ).json()
+    con_cita = cli.post("/api/historiales-medicos", {**ficha, "cita_id": cita["id"]})
+    assert con_cita.status == 201, con_cita
+    assert con_cita.json()["mascota_id"] == mascota["id"]
+    assert cli.get(f"/api/citas/{cita['id']}").json()["estado"] == "Completada"
+
+    otra = cli.post(
+        "/api/mascotas",
+        {"cliente_id": tutor["id"], "especie_id": especie["id"], "nombre": "Nala",
+         "sexo": "Hembra", "color": "negro"},
+    ).json()
+    cruzada = cli.post(
+        "/api/historiales-medicos", {**ficha, "cita_id": cita["id"], "mascota_id": otra["id"]}
+    )
+    assert cruzada.status in (409, 422), cruzada
+
+    # Borrar la cita no borra la ficha clínica.
+    cli.delete(f"/api/citas/{cita['id']}")
+    ficha_guardada = cli.get(f"/api/historiales-medicos/{con_cita.json()['id']}")
+    assert ficha_guardada.status == 200 and ficha_guardada.json()["cita_id"] is None
+
+
+class _BuzonFalso:
+    """Adaptador de prueba del puerto `Notificaciones`."""
+
+    def __init__(self, falla: bool = False):
+        self.enviados = []
+        self.falla = falla
+
+    def codigo_recuperacion(self, usuario, codigo):
+        if self.falla:
+            from app.domain.errors import ServicioNoDisponibleError
+
+            raise ServicioNoDisponibleError("SMTP caído")
+        self.enviados.append((usuario.email, codigo.codigo))
+
+
+def test_recuperacion_envia_el_codigo_por_correo():
+    ruta = os.path.join(tempfile.mkdtemp(prefix="mundopeludo-correo-"), "prueba.db")
+    configuracion = Config(
+        ruta_bd=ruta, secreto_jwt="s", exigir_auth=True, correo_host="smtp.ejemplo.com"
+    )
+    app = create_app(configuracion)
+    buzon = _BuzonFalso()
+    app.state.contenedor.servicios.notificaciones = buzon
+    cli = crear_cliente(app)
+    _crear(cli, "olvido@test.com")
+
+    r = cli.post("/api/auth/password/recuperar", {"email": "olvido@test.com"})
+    assert r.status == 200, r
+    # Con correo configurado el código NO viaja en la respuesta.
+    assert "codigo_debug" not in r.json(), r.json()
+    assert len(buzon.enviados) == 1 and buzon.enviados[0][0] == "olvido@test.com"
+    codigo = buzon.enviados[0][1]
+    restablecida = cli.post(
+        "/api/auth/password/restablecer",
+        {"email": "olvido@test.com", "codigo": codigo, "password_nueva": "nuevaClave123"},
+    )
+    assert restablecida.status == 200, restablecida
+
+    # Correo inexistente: misma respuesta y ningún envío.
+    r = cli.post("/api/auth/password/recuperar", {"email": "nadie@test.com"})
+    assert r.status == 200 and len(buzon.enviados) == 1
+
+    # Si el SMTP falla: 503 y no queda un código activo que nadie recibió.
+    app.state.contenedor.servicios.notificaciones = _BuzonFalso(falla=True)
+    fallo = cli.post("/api/auth/password/recuperar", {"email": "olvido@test.com"})
+    assert fallo.status == 503, fallo
+
+
+def test_correo_smtp_arma_el_mensaje():
+    import smtplib
+
+    from app.domain.model.sistema import CodigoRecuperacion
+    from app.domain.model.usuario import Usuario
+    from app.infrastructure.notificaciones.adaptadores import CorreoSmtp
+
+    llamadas = {}
+
+    class SmtpFalso:
+        def __init__(self, host, puerto, timeout=None):
+            llamadas["servidor"] = (host, puerto)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def starttls(self, context=None):
+            llamadas["tls"] = True
+
+        def login(self, usuario, password):
+            llamadas["login"] = (usuario, password)
+
+        def send_message(self, mensaje):
+            llamadas["mensaje"] = mensaje
+
+    original = smtplib.SMTP
+    smtplib.SMTP = SmtpFalso
+    try:
+        CorreoSmtp(
+            "smtp.gmail.com", 587, "sistema@test.com", "clave",
+            "MundoPeludo <sistema@test.com>",
+        ).codigo_recuperacion(
+            Usuario(email="ana@test.com", nombre="Ana", apellidos="Pérez"),
+            CodigoRecuperacion(usuario_id=1, codigo="123456"),
+        )
+    finally:
+        smtplib.SMTP = original
+
+    assert llamadas["servidor"] == ("smtp.gmail.com", 587)
+    assert llamadas["tls"] is True and llamadas["login"] == ("sistema@test.com", "clave")
+    mensaje = llamadas["mensaje"]
+    assert mensaje["To"] == "ana@test.com" and mensaje["From"] == "MundoPeludo <sistema@test.com>"
+    assert "Recuperación" in mensaje["Subject"]
+    partes = {p.get_content_type(): p.get_content() for p in mensaje.iter_parts()}
+    assert "123456" in partes["text/plain"] and "123456" in partes["text/html"]
+    assert "Ana Pérez" in partes["text/plain"]
+
+
+def test_api_cerrada_por_defecto():
+    anterior = os.environ.pop("MP_REQUIRE_AUTH", None)
+    try:
+        assert Config().exigir_auth is True
+    finally:
+        if anterior is not None:
+            os.environ["MP_REQUIRE_AUTH"] = anterior
+
+
+def test_crear_superusuario_por_consola():
+    import subprocess
+
+    ruta = os.path.join(tempfile.mkdtemp(prefix="mundopeludo-su-"), "prueba.db")
+    entorno = {**os.environ, "MP_DB_PATH": ruta, "MP_SUPERUSER_PASSWORD": PASSWORD,
+               "PYTHONIOENCODING": "utf-8"}
+    script = os.path.join(RAIZ, "crear_superusuario.py")
+    argumentos = [sys.executable, script, "--no-interactivo", "--email", "raiz@test.com",
+                  "--nombre", "Rita", "--apellidos", "Raíz"]
+    creado = subprocess.run(argumentos, env=entorno, capture_output=True, text=True, encoding="utf-8")
+    assert creado.returncode == 0, creado.stderr
+    repetido = subprocess.run(argumentos, env=entorno, capture_output=True, text=True, encoding="utf-8")
+    assert repetido.returncode == 1 and "Ya existe" in repetido.stderr, repetido.stderr
+
+    app = create_app(Config(ruta_bd=ruta, secreto_jwt="s", exigir_auth=True, correo_host=""))
+    cli = crear_cliente(app)
+    sesion = _token(cli, "raiz@test.com")
+    assert cli.get("/api/users", headers=sesion).status == 200
 
 
 def _ejecutar_todo() -> int:

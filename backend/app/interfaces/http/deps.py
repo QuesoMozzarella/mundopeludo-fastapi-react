@@ -36,9 +36,19 @@ from ...domain.ports.repositories import (
     SolicitudAdopcionRepository,
     UsuarioRepository,
 )
-from ...domain.ports.services import Clock, GeneradorCodigos, PasswordHasher, TokenService
+from ...domain.ports.services import (
+    Clock,
+    GeneradorCodigos,
+    Notificaciones,
+    PasswordHasher,
+    TokenService,
+)
 from ...domain.value_objects import TipoUsuario
 from ...infrastructure.db.connection import Database
+from ...infrastructure.notificaciones.adaptadores import (
+    CorreoSmtp,
+    NotificacionesEnRegistro,
+)
 from ...infrastructure.repositories.citas import (
     SqliteCitaRepository,
     SqliteDisponibilidadRepository,
@@ -83,6 +93,7 @@ class Servicios:
     tokens: TokenService
     reloj: Clock
     generador: GeneradorCodigos
+    notificaciones: Notificaciones
 
 
 @dataclass
@@ -124,6 +135,20 @@ class Contenedor:
             tokens=JwtTokenService(self.config.secreto_jwt, self.config.minutos_token),
             reloj=RelojSistema(),
             generador=GeneradorCodigosSeguro(),
+            notificaciones=self._notificaciones(),
+        )
+
+    def _notificaciones(self) -> Notificaciones:
+        c = self.config
+        if not c.correo_configurado:
+            return NotificacionesEnRegistro()
+        return CorreoSmtp(
+            c.correo_host,
+            c.correo_puerto,
+            c.correo_usuario,
+            c.correo_password,
+            c.correo_remitente,
+            usar_tls=c.correo_tls,
         )
 
     def preparar(self) -> None:

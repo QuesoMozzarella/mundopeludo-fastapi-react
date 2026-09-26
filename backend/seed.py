@@ -12,6 +12,10 @@ from decimal import Decimal
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+from app.entorno import cargar_env  # noqa: E402
+
+cargar_env()  # antes de importar la configuración
+
 from app.application.use_cases.autenticacion import RegistrarUsuario  # noqa: E402
 from app.application.use_cases.citas import AgendarCita, ReglasDeAgenda  # noqa: E402
 from app.application.use_cases.historiales import RegistrarHistorial  # noqa: E402
@@ -196,7 +200,12 @@ def poblar() -> None:
             }
         )
         RegistrarHistorial(
-            repos.historiales, repos.citas, repos.usuarios, servicios_tec.reloj
+            repos.historiales,
+            repos.citas,
+            repos.mascotas,
+            repos.usuarios,
+            repos.estados_cita,
+            servicios_tec.reloj,
         ).ejecutar(
             {
                 "cita_id": cita.id,

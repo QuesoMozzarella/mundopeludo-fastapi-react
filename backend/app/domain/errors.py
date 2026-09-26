@@ -61,3 +61,7 @@ class IntentoFallidoError(AuthenticationError):
 
 class AuthorizationError(DomainError):
     """El actor no tiene permisos para la operación."""
+
+
+class ServicioNoDisponibleError(DomainError):
+    """Un servicio externo necesario (p. ej. el correo) no respondió."""

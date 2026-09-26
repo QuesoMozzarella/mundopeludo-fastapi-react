@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 from ...domain.errors import ConflictError, NotFoundError, ValidationError
+from ...domain.model.cita import Cita
 from ...domain.model.historial import HistorialMedico
 from ...domain.ports.repositories import (
     CitaRepository,
+    EstadoCitaRepository,
     HistorialMedicoRepository,
     MascotaRepository,
     UsuarioRepository,
@@ -39,8 +41,8 @@ class ConsultarHistoriales:
         return self._componer(historial)
 
     def _componer(self, historial: HistorialMedico) -> HistorialVista:
-        cita = self.citas.obtener(historial.cita_id)
-        mascota = self.mascotas.obtener(cita.mascota_id) if cita else None
+        cita = self.citas.obtener(historial.cita_id) if historial.cita_id else None
+        mascota = self.mascotas.obtener(historial.mascota_id)
         veterinario = self.usuarios.obtener(historial.veterinario_id)
         return HistorialVista(
             historial=historial,
@@ -52,40 +54,41 @@ class ConsultarHistoriales:
         )
 
 
+ESTADO_CITA_ATENDIDA = "Completada"
+
+
 class RegistrarHistorial:
-    """Crea la ficha clínica de una cita (relación 1–1, como el OneToOneField)."""
+    """Registra la ficha clínica de una mascota, con o sin cita previa.
+
+    Con cita, la mascota y el veterinario salen de ella (si no se indican) y
+    la cita queda como `Completada`. Sin cita, hay que indicar ambos.
+    """
 
     def __init__(
         self,
         historiales: HistorialMedicoRepository,
         citas: CitaRepository,
+        mascotas: MascotaRepository,
         usuarios: UsuarioRepository,
+        estados: EstadoCitaRepository,
         reloj: Clock,
     ):
         self.historiales = historiales
         self.citas = citas
+        self.mascotas = mascotas
         self.usuarios = usuarios
+        self.estados = estados
         self.reloj = reloj
 
     def ejecutar(self, datos: dict) -> HistorialMedico:
-        cita = self.citas.obtener(datos.get("cita_id"))
-        if cita is None:
-            raise NotFoundError("Cita", datos.get("cita_id"))
-        if self.historiales.obtener_por_cita(cita.id):
-            raise ConflictError("Esa cita ya tiene un historial registrado")
+        cita = self._cita(datos.get("cita_id"))
+        mascota_id = self._mascota(datos.get("mascota_id"), cita)
+        veterinario_id = self._veterinario(datos.get("veterinario_id"), cita)
 
-        veterinario_id = datos.get("veterinario_id") or cita.veterinario_id
-        veterinario = self.usuarios.obtener(veterinario_id)
-        if veterinario is None:
-            raise NotFoundError("Usuario", veterinario_id)
-        if not veterinario.es_veterinario:
-            raise ValidationError(
-                "Sólo un veterinario puede firmar un historial", "veterinario_id"
-            )
-
-        return self.historiales.crear(
+        historial = self.historiales.crear(
             HistorialMedico(
-                cita_id=cita.id,
+                mascota_id=mascota_id,
+                cita_id=cita.id if cita else None,
                 veterinario_id=veterinario_id,
                 diagnostico=datos.get("diagnostico"),
                 tratamiento=datos.get("tratamiento"),
@@ -93,6 +96,52 @@ class RegistrarHistorial:
                 fecha_creacion=self.reloj.ahora(),
             )
         )
+        if cita:
+            self._marcar_atendida(cita)
+        return historial
+
+    def _cita(self, cita_id: int | None) -> Cita | None:
+        if not cita_id:
+            return None
+        cita = self.citas.obtener(cita_id)
+        if cita is None:
+            raise NotFoundError("Cita", cita_id)
+        if self.historiales.obtener_por_cita(cita.id):
+            raise ConflictError("Esa cita ya tiene un historial registrado")
+        return cita
+
+    def _mascota(self, mascota_id: int | None, cita: Cita | None) -> int:
+        if cita:
+            if mascota_id and mascota_id != cita.mascota_id:
+                raise ValidationError("La cita indicada es de otra mascota", "mascota_id")
+            return cita.mascota_id
+        if not mascota_id:
+            raise ValidationError("Indica la cita o la mascota del historial", "mascota_id")
+        if self.mascotas.obtener(mascota_id) is None:
+            raise NotFoundError("Mascota", mascota_id)
+        return mascota_id
+
+    def _veterinario(self, veterinario_id: int | None, cita: Cita | None) -> int:
+        veterinario_id = veterinario_id or (cita.veterinario_id if cita else None)
+        if not veterinario_id:
+            raise ValidationError(
+                "Indica el veterinario que firma el historial", "veterinario_id"
+            )
+        veterinario = self.usuarios.obtener(veterinario_id)
+        if veterinario is None:
+            raise NotFoundError("Usuario", veterinario_id)
+        if not veterinario.es_veterinario:
+            raise ValidationError(
+                "Sólo un veterinario puede firmar un historial", "veterinario_id"
+            )
+        return veterinario_id
+
+    def _marcar_atendida(self, cita: Cita) -> None:
+        """Como hacía la API anterior: registrar la ficha cierra la cita."""
+        atendida = self.estados.obtener_por_nombre(ESTADO_CITA_ATENDIDA)
+        if atendida is not None:
+            cita.cambiar_estado(atendida.id)
+            self.citas.actualizar(cita)
 
 
 class ActualizarHistorial:

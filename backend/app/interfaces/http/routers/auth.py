@@ -11,7 +11,6 @@ from ....application.use_cases.autenticacion import (
     SolicitarCodigoRecuperacion,
 )
 from ....application.use_cases.usuarios import ConsultarUsuarios
-from ....config import Config
 from ....domain.value_objects import TipoUsuario
 from ..deps import AccesoDep, ConfigDep, ReposDep, ServiciosDep, UsuarioDep
 from ..schemas.usuarios import (
@@ -108,14 +107,19 @@ def recuperar(
     datos: RecuperacionIn, repos: ReposDep, servicios: ServiciosDep, configuracion: ConfigDep
 ) -> dict:
     caso = SolicitarCodigoRecuperacion(
-        repos.usuarios, repos.codigos, servicios.generador, servicios.reloj
+        repos.usuarios,
+        repos.codigos,
+        servicios.generador,
+        servicios.reloj,
+        servicios.notificaciones,
     )
     codigo = caso.ejecutar(datos.email)
     respuesta = {
         "detail": "Si el correo está registrado, recibirás un código de 6 dígitos",
     }
-    # En desarrollo devolvemos el código: no hay servicio de email configurado.
-    if codigo and not _es_produccion(configuracion):
+    # Sólo sin correo configurado y fuera de producción se devuelve el código:
+    # con él en la respuesta, cualquiera podría restablecer cualquier cuenta.
+    if codigo and not configuracion.correo_configurado and not configuracion.es_produccion:
         respuesta["codigo_debug"] = codigo.codigo
         respuesta["expira"] = codigo.fecha_expiracion.isoformat()
     return respuesta
@@ -127,6 +131,3 @@ def restablecer(datos: RestablecerIn, repos: ReposDep, servicios: ServiciosDep) 
     usuario = caso.ejecutar(datos.email, datos.codigo, datos.password_nueva)
     return _vista(repos, usuario.id)
 
-
-def _es_produccion(configuracion: Config) -> bool:
-    return configuracion.es_produccion

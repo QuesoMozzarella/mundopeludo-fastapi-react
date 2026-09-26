@@ -12,6 +12,10 @@ import sys
 # ejecutando este archivo directamente.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+from app.entorno import cargar_env  # noqa: E402
+
+cargar_env()  # antes de importar la configuración
+
 from app.bootstrap import create_app  # noqa: E402
 
 app = create_app()

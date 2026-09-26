@@ -51,8 +51,20 @@ def obtener(historial_id: int, repos: ReposDep, acceso: AccesoDep) -> HistorialO
     summary="Registrar la ficha clínica de una cita",
     dependencies=[SoloPersonal],
 )
-def crear(datos: HistorialIn, repos: ReposDep, servicios: ServiciosDep) -> HistorialOut:
-    caso = RegistrarHistorial(repos.historiales, repos.citas, repos.usuarios, servicios.reloj)
+def crear(
+    datos: HistorialIn, repos: ReposDep, servicios: ServiciosDep, acceso: AccesoDep
+) -> HistorialOut:
+    if datos.veterinario_id is not None:
+        # Quien firma la ficha es el veterinario de la sesión (o un admin).
+        acceso.propietario(datos.veterinario_id, personal=False)
+    caso = RegistrarHistorial(
+        repos.historiales,
+        repos.citas,
+        repos.mascotas,
+        repos.usuarios,
+        repos.estados_cita,
+        servicios.reloj,
+    )
     historial = caso.ejecutar(datos.model_dump())
     return HistorialOut.desde(_consulta(repos).obtener(historial.id))
 
@@ -103,5 +115,7 @@ def listar_alias(
     include_in_schema=False,
     dependencies=[SoloPersonal],
 )
-def crear_alias(datos: HistorialIn, repos: ReposDep, servicios: ServiciosDep) -> HistorialOut:
-    return crear(datos, repos, servicios)
+def crear_alias(
+    datos: HistorialIn, repos: ReposDep, servicios: ServiciosDep, acceso: AccesoDep
+) -> HistorialOut:
+    return crear(datos, repos, servicios, acceso)

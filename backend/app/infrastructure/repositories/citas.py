@@ -283,6 +283,7 @@ class SqliteCitaRepository(RepositorioSQLite, CitaRepository):
 def _a_historial(fila: sqlite3.Row) -> HistorialMedico:
     return HistorialMedico(
         id=fila["id"],
+        mascota_id=fila["mascota_id"],
         cita_id=fila["cita_id"],
         veterinario_id=fila["veterinario_id"],
         diagnostico=fila["diagnostico"],
@@ -296,10 +297,12 @@ class SqliteHistorialMedicoRepository(RepositorioSQLite, HistorialMedicoReposito
     def crear(self, historial: HistorialMedico) -> HistorialMedico:
         historial.id = self._insertar(
             """INSERT INTO historiales_medicos
-               (cita_id, veterinario_id, diagnostico, tratamiento, observaciones, fecha_creacion)
-               VALUES (?,?,?,?,?,?)""",
+               (mascota_id, cita_id, veterinario_id, diagnostico, tratamiento,
+                observaciones, fecha_creacion)
+               VALUES (?,?,?,?,?,?,?)""",
             (
-                historial.cita_id, historial.veterinario_id, historial.diagnostico,
+                historial.mascota_id, historial.cita_id, historial.veterinario_id,
+                historial.diagnostico,
                 historial.tratamiento, historial.observaciones, historial.fecha_creacion,
             ),
         )
@@ -327,14 +330,12 @@ class SqliteHistorialMedicoRepository(RepositorioSQLite, HistorialMedicoReposito
     def listar(self, mascota_id=None, veterinario_id=None, cliente_id=None) -> list[HistorialMedico]:
         sql = "SELECT h.* FROM historiales_medicos h"
         params: list = []
-        if mascota_id is not None or cliente_id is not None:
-            sql += " JOIN citas c ON c.id = h.cita_id"
-            if cliente_id is not None:
-                sql += " JOIN mascotas m ON m.id = c.mascota_id AND m.cliente_id = ?"
-                params.append(cliente_id)
+        if cliente_id is not None:
+            sql += " JOIN mascotas m ON m.id = h.mascota_id AND m.cliente_id = ?"
+            params.append(cliente_id)
         sql += " WHERE 1=1"
         if mascota_id is not None:
-            sql += " AND c.mascota_id=?"
+            sql += " AND h.mascota_id=?"
             params.append(mascota_id)
         if veterinario_id is not None:
             sql += " AND h.veterinario_id=?"
