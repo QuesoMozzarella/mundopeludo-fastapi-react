@@ -6,12 +6,17 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from ..errors import ValidationError
 from ..value_objects import TipoUsuario
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+# Tras MAX_INTENTOS_LOGIN contraseñas erróneas seguidas, la cuenta queda
+# bloqueada MINUTOS_BLOQUEO_LOGIN minutos, aunque luego llegue la correcta.
+MAX_INTENTOS_LOGIN = 5
+MINUTOS_BLOQUEO_LOGIN = 15
 
 
 def _texto(valor: str | None, *, campo: str, minimo: int = 1, maximo: int = 255,
@@ -44,6 +49,8 @@ class Usuario:
     is_superuser: bool = False
     date_joined: datetime = field(default_factory=datetime.now)
     last_login: datetime | None = None
+    intentos_fallidos: int = 0
+    bloqueado_hasta: datetime | None = None
     id: int | None = None
 
     def __post_init__(self) -> None:
@@ -78,6 +85,28 @@ class Usuario:
 
     def registrar_acceso(self, momento: datetime) -> None:
         self.last_login = momento
+        self.desbloquear()
+
+    # --- protección contra fuerza bruta ---
+    def esta_bloqueado(self, ahora: datetime) -> bool:
+        return self.bloqueado_hasta is not None and ahora < self.bloqueado_hasta
+
+    def minutos_de_bloqueo(self, ahora: datetime) -> int:
+        """Minutos que faltan, redondeando hacia arriba (mínimo 1)."""
+        if not self.esta_bloqueado(ahora):
+            return 0
+        segundos = (self.bloqueado_hasta - ahora).total_seconds()
+        return max(1, -(-int(segundos) // 60))
+
+    def registrar_fallo_de_acceso(self, ahora: datetime) -> None:
+        self.intentos_fallidos += 1
+        if self.intentos_fallidos >= MAX_INTENTOS_LOGIN:
+            self.bloqueado_hasta = ahora + timedelta(minutes=MINUTOS_BLOQUEO_LOGIN)
+            self.intentos_fallidos = 0
+
+    def desbloquear(self) -> None:
+        self.intentos_fallidos = 0
+        self.bloqueado_hasta = None
 
     def desactivar(self) -> None:
         """Baja lógica: Django nunca borraba usuarios, los marcaba inactivos."""

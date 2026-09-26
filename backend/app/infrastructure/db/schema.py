@@ -20,7 +20,9 @@ CREATE TABLE IF NOT EXISTS usuarios (
     is_staff        INTEGER NOT NULL DEFAULT 0,
     is_superuser    INTEGER NOT NULL DEFAULT 0,
     date_joined     TEXT    NOT NULL,
-    last_login      TEXT
+    last_login      TEXT,
+    intentos_fallidos INTEGER NOT NULL DEFAULT 0,
+    bloqueado_hasta TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_usuarios_tipo ON usuarios(tipo);
 
@@ -333,6 +335,13 @@ PRAGMA foreign_keys = ON;
 
 def migrar(conn) -> None:
     """Pone al día una base existente antes de aplicar el DDL."""
+    usuarios = _columnas(conn, "usuarios")
+    if usuarios and "intentos_fallidos" not in usuarios:
+        # v2 → v3: bloqueo temporal por intentos de login fallidos.
+        conn.execute(
+            "ALTER TABLE usuarios ADD COLUMN intentos_fallidos INTEGER NOT NULL DEFAULT 0"
+        )
+        conn.execute("ALTER TABLE usuarios ADD COLUMN bloqueado_hasta TEXT")
     historiales = _columnas(conn, "historiales_medicos")
     if historiales and "mascota_id" not in historiales:
         # v1 → v2: la cita del historial pasa a ser opcional.

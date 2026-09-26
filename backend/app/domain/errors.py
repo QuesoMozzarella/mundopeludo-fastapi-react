@@ -63,5 +63,13 @@ class AuthorizationError(DomainError):
     """El actor no tiene permisos para la operación."""
 
 
+class DemasiadosIntentosError(DomainError):
+    """Se superó el límite de intentos; hay que esperar antes de reintentar."""
+
+    def __init__(self, mensaje: str, reintentar_en_segundos: int):
+        super().__init__(mensaje)
+        self.reintentar_en_segundos = reintentar_en_segundos
+
+
 class ServicioNoDisponibleError(DomainError):
     """Un servicio externo necesario (p. ej. el correo) no respondió."""

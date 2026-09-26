@@ -13,6 +13,7 @@ from ...domain.errors import (
     AuthorizationError,
     BusinessRuleError,
     ConflictError,
+    DemasiadosIntentosError,
     DomainError,
     NotFoundError,
     ServicioNoDisponibleError,
@@ -29,6 +30,7 @@ CODIGOS = {
     BusinessRuleError: status.HTTP_409_CONFLICT,
     AuthenticationError: status.HTTP_401_UNAUTHORIZED,
     AuthorizationError: status.HTTP_403_FORBIDDEN,
+    DemasiadosIntentosError: status.HTTP_429_TOO_MANY_REQUESTS,
     ServicioNoDisponibleError: status.HTTP_503_SERVICE_UNAVAILABLE,
 }
 
@@ -39,6 +41,8 @@ def _respuesta(exc: DomainError, codigo: int) -> JSONResponse:
     if campo:
         cuerpo["campo"] = campo
     cabeceras = {"WWW-Authenticate": "Bearer"} if codigo == status.HTTP_401_UNAUTHORIZED else None
+    if isinstance(exc, DemasiadosIntentosError):
+        cabeceras = {"Retry-After": str(exc.reintentar_en_segundos)}
     return JSONResponse(status_code=codigo, content=cuerpo, headers=cabeceras)
 
 

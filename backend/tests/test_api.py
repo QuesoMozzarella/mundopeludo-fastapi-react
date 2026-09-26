@@ -1141,6 +1141,71 @@ def test_bajas_bloquean_nuevas_operaciones():
     assert solicitud.status == 409, solicitud
 
 
+class _RelojFijo:
+    """Reloj controlable para pruebas que dependen del paso del tiempo."""
+
+    def __init__(self, inicio: datetime):
+        self.momento = inicio
+
+    def ahora(self) -> datetime:
+        return self.momento
+
+    def hoy(self):
+        return self.momento.date()
+
+
+def test_login_se_bloquea_tras_intentos_fallidos():
+    app, cli = cliente_con_auth()
+    reloj = _RelojFijo(datetime(2030, 1, 1, 12, 0))
+    app.state.contenedor.servicios.reloj = reloj
+    _crear(cli, "bloqueo@test.com")
+    correcta = {"email": "bloqueo@test.com", "password": PASSWORD}
+    erronea = {"email": "bloqueo@test.com", "password": "noEsLaClave1"}
+
+    # Un acceso correcto reinicia el contador: 4 fallos + acierto + 4 fallos no bloquean.
+    for _ in range(4):
+        assert cli.post("/api/auth/login", erronea).status == 401
+    assert cli.post("/api/auth/login", correcta).status == 200
+    for _ in range(4):
+        assert cli.post("/api/auth/login", erronea).status == 401
+    assert cli.post("/api/auth/login", correcta).status == 200
+
+    # 5 fallos seguidos bloquean incluso la contraseña correcta.
+    for _ in range(5):
+        assert cli.post("/api/auth/login", erronea).status == 401
+    bloqueado = cli.post("/api/auth/login", correcta)
+    assert bloqueado.status == 429, bloqueado
+    assert bloqueado.headers.get("retry-after") == str(15 * 60), bloqueado.headers
+
+    reloj.momento += timedelta(minutes=14)
+    assert cli.post("/api/auth/login", correcta).status == 429
+    reloj.momento += timedelta(minutes=2)
+    assert cli.post("/api/auth/login", correcta).status == 200
+
+    # Otro correo no se ve afectado y uno inexistente sigue dando 401.
+    assert cli.post("/api/auth/login", {"email": "nadie@test.com", "password": "x"}).status == 401
+
+
+def test_restablecer_password_desbloquea_la_cuenta():
+    cli = nuevo_cliente()
+    _crear(cli, "olvidadiza@test.com")
+    for _ in range(5):
+        cli.post("/api/auth/login", {"email": "olvidadiza@test.com", "password": "malaClave99"})
+    assert cli.post(
+        "/api/auth/login", {"email": "olvidadiza@test.com", "password": PASSWORD}
+    ).status == 429
+    codigo = cli.post(
+        "/api/auth/password/recuperar", {"email": "olvidadiza@test.com"}
+    ).json()["codigo_debug"]
+    cli.post(
+        "/api/auth/password/restablecer",
+        {"email": "olvidadiza@test.com", "codigo": codigo, "password_nueva": "claveNueva123"},
+    )
+    assert cli.post(
+        "/api/auth/login", {"email": "olvidadiza@test.com", "password": "claveNueva123"}
+    ).status == 200
+
+
 def _ejecutar_todo() -> int:
     pruebas = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     fallos = 0

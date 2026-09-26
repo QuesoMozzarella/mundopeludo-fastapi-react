@@ -172,7 +172,11 @@ Los **15 modelos** del proyecto original están cubiertos:
     publicarla en adopción, y consultar usuarios, bitácora o panel quedan
     reservados al personal;
   * quien aprueba o rechaza una adopción, o firma un historial, lo hace con
-    su propio id.
+    su propio id;
+  * tras 5 contraseñas erróneas seguidas la cuenta se bloquea 15 minutos
+    (429 con `Retry-After`), incluso para la contraseña correcta. Un login
+    correcto reinicia el contador y restablecer la contraseña por código
+    desbloquea al momento.
 
   `MP_REQUIRE_AUTH=0` abre la API por completo (cualquiera lee y modifica
   cualquier dato); sólo sirve para desarrollo local y la app lo avisa al

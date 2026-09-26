@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from ...domain.errors import (
     AuthenticationError,
     ConflictError,
+    DemasiadosIntentosError,
     IntentoFallidoError,
     NotFoundError,
     ValidationError,
@@ -143,12 +144,25 @@ class AutenticarUsuario:
             # texto ni el tiempo de respuesta revelan si el correo existe.
             self.hasher.verificar(password, self._hash_senuelo())
             raise AuthenticationError("Correo o contraseña incorrectos")
+        ahora = self.reloj.ahora()
+        # El bloqueo se comprueba antes que la contraseña: mientras dura, ni
+        # siquiera la correcta entra, así que probar claves no aporta nada.
+        if usuario.esta_bloqueado(ahora):
+            minutos = usuario.minutos_de_bloqueo(ahora)
+            raise DemasiadosIntentosError(
+                "Demasiados intentos fallidos. La cuenta está bloqueada "
+                f"temporalmente; inténtalo de nuevo en {minutos} min",
+                reintentar_en_segundos=minutos * 60,
+            )
         if not self.hasher.verificar(password, usuario.password_hash):
-            raise AuthenticationError("Correo o contraseña incorrectos")
+            usuario.registrar_fallo_de_acceso(ahora)
+            self.usuarios.actualizar(usuario)
+            # IntentoFallidoError conserva el contador pese al rollback.
+            raise IntentoFallidoError("Correo o contraseña incorrectos")
         if not usuario.is_active:
             raise AuthenticationError("La cuenta está desactivada")
 
-        usuario.registrar_acceso(self.reloj.ahora())
+        usuario.registrar_acceso(ahora)
         self.usuarios.actualizar(usuario)
 
         token = self.tokens.emitir(
@@ -266,6 +280,8 @@ class RestablecerPassword:
         self.codigos.actualizar(registro)
 
         usuario.password_hash = self.hasher.hash(password_nueva)
+        # Quien demuestra controlar el correo recupera el acceso al momento.
+        usuario.desbloquear()
         return self.usuarios.actualizar(usuario)
 
 

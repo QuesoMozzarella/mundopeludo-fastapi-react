@@ -97,6 +97,8 @@ class ActualizarUsuario:
             is_superuser=usuario.is_superuser,
             date_joined=usuario.date_joined,
             last_login=usuario.last_login,
+            intentos_fallidos=usuario.intentos_fallidos,
+            bloqueado_hasta=usuario.bloqueado_hasta,
         )
         self.usuarios.actualizar(actualizado)
 

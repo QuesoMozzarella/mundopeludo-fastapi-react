@@ -15,7 +15,8 @@ from ._comun import RepositorioSQLite, a_bool, a_date, a_datetime, filtro_like
 
 CAMPOS_USUARIO = (
     "id, email, password_hash, nombre, apellidos, telefono, direccion, tipo, "
-    "is_active, is_staff, is_superuser, date_joined, last_login"
+    "is_active, is_staff, is_superuser, date_joined, last_login, "
+    "intentos_fallidos, bloqueado_hasta"
 )
 
 
@@ -34,6 +35,8 @@ def _a_usuario(fila: sqlite3.Row) -> Usuario:
         is_superuser=a_bool(fila["is_superuser"]),
         date_joined=a_datetime(fila["date_joined"]),
         last_login=a_datetime(fila["last_login"]),
+        intentos_fallidos=fila["intentos_fallidos"],
+        bloqueado_hasta=a_datetime(fila["bloqueado_hasta"]),
     )
 
 
@@ -42,13 +45,15 @@ class SqliteUsuarioRepository(RepositorioSQLite, UsuarioRepository):
         usuario.id = self._insertar(
             """INSERT INTO usuarios
                (email, password_hash, nombre, apellidos, telefono, direccion, tipo,
-                is_active, is_staff, is_superuser, date_joined, last_login)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+                is_active, is_staff, is_superuser, date_joined, last_login,
+                intentos_fallidos, bloqueado_hasta)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 usuario.email, usuario.password_hash, usuario.nombre, usuario.apellidos,
                 usuario.telefono, usuario.direccion, usuario.tipo.value,
                 int(usuario.is_active), int(usuario.is_staff), int(usuario.is_superuser),
                 usuario.date_joined, usuario.last_login,
+                usuario.intentos_fallidos, usuario.bloqueado_hasta,
             ),
         )
         return usuario
@@ -57,13 +62,14 @@ class SqliteUsuarioRepository(RepositorioSQLite, UsuarioRepository):
         self._ejecutar(
             """UPDATE usuarios SET email=?, password_hash=?, nombre=?, apellidos=?,
                    telefono=?, direccion=?, tipo=?, is_active=?, is_staff=?,
-                   is_superuser=?, last_login=?
+                   is_superuser=?, last_login=?, intentos_fallidos=?, bloqueado_hasta=?
                WHERE id=?""",
             (
                 usuario.email, usuario.password_hash, usuario.nombre, usuario.apellidos,
                 usuario.telefono, usuario.direccion, usuario.tipo.value,
                 int(usuario.is_active), int(usuario.is_staff), int(usuario.is_superuser),
-                usuario.last_login, usuario.id,
+                usuario.last_login, usuario.intentos_fallidos, usuario.bloqueado_hasta,
+                usuario.id,
             ),
         )
         return usuario
