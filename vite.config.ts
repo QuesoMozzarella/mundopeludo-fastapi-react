@@ -4,19 +4,23 @@ import tailwindcss from '@tailwindcss/vite';
 import { spawn, ChildProcess } from 'child_process';
 import http from 'http';
 
+// Puerto del backend FastAPI. Las pruebas e2e usan otro para no tocar el de desarrollo.
+const PUERTO_API = process.env.FASTAPI_PORT || '8001';
+const URL_API = `http://127.0.0.1:${PUERTO_API}`;
+
 function fastApiPlugin(): Plugin {
   let fastApiProc: ChildProcess | null = null;
 
-  // Check if port 8001 is already running
+  // ¿Hay ya un backend escuchando en el puerto?
   const checkAndStart = () => {
-    const req = http.get('http://127.0.0.1:8001/api/health', (res) => {
+    const req = http.get(`${URL_API}/api/health`, (res) => {
       if (res.statusCode === 200) {
-        console.log('[Vite] FastAPI is already running on port 8001.');
+        console.log(`[Vite] FastAPI is already running on port ${PUERTO_API}.`);
       }
     });
 
     req.on('error', () => {
-      console.log('[Vite] Starting FastAPI backend on port 8001...');
+      console.log(`[Vite] Starting FastAPI backend on port ${PUERTO_API}...`);
       // En Windows el intérprete se llama `python`; en Linux/macOS, `python3`.
       const candidates = process.platform === 'win32'
         ? ['python', 'py', 'python3']
@@ -26,7 +30,7 @@ function fastApiPlugin(): Plugin {
         if (index >= candidates.length) {
           console.error(
             '[Vite] No se encontro Python. Instalalo o levanta el backend a mano: ' +
-            'python -m uvicorn backend.main:app --reload --port 8001'
+            `python -m uvicorn backend.main:app --reload --port ${PUERTO_API}`
           );
           return;
         }
@@ -35,7 +39,7 @@ function fastApiPlugin(): Plugin {
           '-m', 'uvicorn',
           'backend.main:app',
           '--host', '127.0.0.1',
-          '--port', '8001'
+          '--port', PUERTO_API
         ], {
           stdio: 'inherit',
           cwd: process.cwd()
@@ -64,7 +68,8 @@ function fastApiPlugin(): Plugin {
     // uvicorn mantenía vivo el build y nunca terminaba.
     apply: 'serve',
     configureServer(server) {
-      checkAndStart();
+      // FASTAPI_EXTERNO=1: alguien más gestiona el backend (p. ej. las pruebas e2e).
+      if (process.env.FASTAPI_EXTERNO !== '1') checkAndStart();
       server.httpServer?.on('close', () => {
         if (fastApiProc) {
           console.log('[Vite] Terminating FastAPI backend...');
@@ -88,19 +93,19 @@ export default defineConfig({
     host: '0.0.0.0',
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:8001',
+        target: URL_API,
         changeOrigin: true,
       },
       '/docs': {
-        target: 'http://127.0.0.1:8001',
+        target: URL_API,
         changeOrigin: true,
       },
       '/openapi.json': {
-        target: 'http://127.0.0.1:8001',
+        target: URL_API,
         changeOrigin: true,
       },
       '/redoc': {
-        target: 'http://127.0.0.1:8001',
+        target: URL_API,
         changeOrigin: true,
       }
     }

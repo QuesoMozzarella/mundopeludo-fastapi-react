@@ -42,3 +42,8 @@ Desktop.ini
 *.swp
 *.swo
 *~
+
+# === PRUEBAS E2E (Playwright) ===
+test-results/
+playwright-report/
+e2e/.tmp/
