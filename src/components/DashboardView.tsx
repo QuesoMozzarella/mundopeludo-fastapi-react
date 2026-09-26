@@ -11,8 +11,7 @@ import {
   Clock, 
   CheckCircle2, 
   Stethoscope, 
-  ShieldCheck, 
-  ExternalLink 
+  ShieldCheck 
 } from 'lucide-react';
 
 interface DashboardViewProps {
@@ -21,7 +20,6 @@ interface DashboardViewProps {
   citas: Cita[];
   mascotas: Mascota[];
   onNavigate: (tab: string) => void;
-  onOpenFastApiDocs: () => void;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
@@ -30,7 +28,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   citas,
   mascotas,
   onNavigate,
-  onOpenFastApiDocs
 }) => {
   return (
     <div className="space-y-8">
@@ -51,17 +48,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
             Monitoreo en tiempo real de la clínica veterinaria MundoPeludo.
           </p>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <button
-            id="btn-dash-docs"
-            onClick={onOpenFastApiDocs}
-            className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-colors flex items-center gap-2"
-          >
-            <span>Ver FastAPI Swagger</span>
-            <ExternalLink className="w-3.5 h-3.5" />
-          </button>
         </div>
       </div>
 

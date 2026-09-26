@@ -24,6 +24,9 @@ ENV/
 # === BASES DE DATOS TEMPORALES ===
 *.log
 *.sqlite3-journal
+backend/data/*.db
+backend/data/*.db-wal
+backend/data/*.db-shm
 
 # === CARPETA LEGACY DJANGO (Aislada para no afectar el repo original) ===
 legacy_django/

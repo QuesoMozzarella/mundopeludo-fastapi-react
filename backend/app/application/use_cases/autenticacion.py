@@ -1,0 +1,260 @@
+"""Casos de uso de autenticación.
+
+Sustituyen a `usuarios/api_auth.py`, `backends.py` y al flujo de
+`CodigoRecuperacion` del Django original.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from ...domain.errors import AuthenticationError, ConflictError, NotFoundError, ValidationError
+from ...domain.model.sistema import ActividadSistema, CodigoRecuperacion
+from ...domain.model.usuario import PerfilCliente, PerfilVeterinario, Usuario
+from ...domain.ports.repositories import (
+    ActividadSistemaRepository,
+    CodigoRecuperacionRepository,
+    PerfilClienteRepository,
+    PerfilVeterinarioRepository,
+    UsuarioRepository,
+)
+from ...domain.ports.services import Clock, GeneradorCodigos, PasswordHasher, TokenService
+from ...domain.value_objects import TipoUsuario
+
+LONGITUD_MINIMA_PASSWORD = 8
+
+
+@dataclass
+class SesionIniciada:
+    usuario: Usuario
+    token: str
+    expira_en_minutos: int
+
+
+class RegistrarUsuario:
+    """Alta de un usuario + su perfil según el tipo (cliente o veterinario)."""
+
+    def __init__(
+        self,
+        usuarios: UsuarioRepository,
+        perfiles_cliente: PerfilClienteRepository,
+        perfiles_veterinario: PerfilVeterinarioRepository,
+        hasher: PasswordHasher,
+        reloj: Clock,
+        actividades: ActividadSistemaRepository | None = None,
+    ):
+        self.usuarios = usuarios
+        self.perfiles_cliente = perfiles_cliente
+        self.perfiles_veterinario = perfiles_veterinario
+        self.hasher = hasher
+        self.reloj = reloj
+        self.actividades = actividades
+
+    def ejecutar(
+        self,
+        email: str,
+        password: str,
+        nombre: str,
+        apellidos: str,
+        telefono: str | None = None,
+        direccion: str | None = None,
+        tipo: str = "cliente",
+        documento: str | None = None,
+        especialidades_ids: list[int] | None = None,
+    ) -> Usuario:
+        validar_password(password)
+        if self.usuarios.obtener_por_email(email):
+            raise ConflictError("Ya existe una cuenta registrada con ese correo")
+
+        usuario = Usuario(
+            email=email,
+            nombre=nombre,
+            apellidos=apellidos,
+            telefono=telefono,
+            direccion=direccion,
+            tipo=tipo,
+            password_hash=self.hasher.hash(password),
+            date_joined=self.reloj.ahora(),
+        )
+        usuario = self.usuarios.crear(usuario)
+
+        if usuario.es_cliente:
+            self.perfiles_cliente.guardar(
+                PerfilCliente(
+                    usuario_id=usuario.id,
+                    documento=documento,
+                    fecha_actualizacion=self.reloj.ahora(),
+                )
+            )
+        elif usuario.es_veterinario:
+            self.perfiles_veterinario.guardar(
+                PerfilVeterinario(
+                    usuario_id=usuario.id,
+                    documento=documento,
+                    fecha_contratacion=self.reloj.hoy(),
+                    especialidades_ids=especialidades_ids or [],
+                )
+            )
+
+        if self.actividades:
+            self.actividades.registrar(
+                ActividadSistema(
+                    usuario=usuario.email,
+                    tipo="registro",
+                    descripcion=f"Nuevo usuario {usuario.tipo.value} registrado",
+                    fecha=self.reloj.ahora(),
+                )
+            )
+        return usuario
+
+
+class AutenticarUsuario:
+    """Login por email + contraseña; emite el JWT de sesión."""
+
+    def __init__(
+        self,
+        usuarios: UsuarioRepository,
+        hasher: PasswordHasher,
+        tokens: TokenService,
+        reloj: Clock,
+        actividades: ActividadSistemaRepository | None = None,
+    ):
+        self.usuarios = usuarios
+        self.hasher = hasher
+        self.tokens = tokens
+        self.reloj = reloj
+        self.actividades = actividades
+
+    def ejecutar(self, email: str, password: str) -> SesionIniciada:
+        usuario = self.usuarios.obtener_por_email(email)
+        if usuario is None or not self.hasher.verificar(password, usuario.password_hash):
+            # Mismo mensaje en ambos casos: no revelamos si el correo existe.
+            raise AuthenticationError("Correo o contraseña incorrectos")
+        if not usuario.is_active:
+            raise AuthenticationError("La cuenta está desactivada")
+
+        usuario.registrar_acceso(self.reloj.ahora())
+        self.usuarios.actualizar(usuario)
+
+        token = self.tokens.emitir(
+            usuario.id, {"email": usuario.email, "tipo": usuario.tipo.value}
+        )
+        if self.actividades:
+            self.actividades.registrar(
+                ActividadSistema(
+                    usuario=usuario.email,
+                    tipo="login",
+                    descripcion="Inicio de sesión correcto",
+                    fecha=self.reloj.ahora(),
+                )
+            )
+        return SesionIniciada(usuario=usuario, token=token, expira_en_minutos=getattr(self.tokens, "minutos_vigencia", 720))
+
+
+class ObtenerUsuarioDesdeToken:
+    def __init__(self, usuarios: UsuarioRepository, tokens: TokenService):
+        self.usuarios = usuarios
+        self.tokens = tokens
+
+    def ejecutar(self, token: str) -> Usuario:
+        payload = self.tokens.decodificar(token)
+        try:
+            usuario_id = int(payload.get("sub"))
+        except (TypeError, ValueError):
+            raise AuthenticationError("Token sin sujeto válido") from None
+        usuario = self.usuarios.obtener(usuario_id)
+        if usuario is None or not usuario.is_active:
+            raise AuthenticationError("La sesión ya no es válida")
+        return usuario
+
+
+class SolicitarCodigoRecuperacion:
+    """Genera el código de 6 dígitos del modelo `CodigoRecuperacion`."""
+
+    def __init__(
+        self,
+        usuarios: UsuarioRepository,
+        codigos: CodigoRecuperacionRepository,
+        generador: GeneradorCodigos,
+        reloj: Clock,
+    ):
+        self.usuarios = usuarios
+        self.codigos = codigos
+        self.generador = generador
+        self.reloj = reloj
+
+    def ejecutar(self, email: str) -> CodigoRecuperacion | None:
+        usuario = self.usuarios.obtener_por_email(email)
+        if usuario is None:
+            # Silencio deliberado: no confirmamos qué correos existen.
+            return None
+        self.codigos.desactivar_todos(usuario.id)
+        codigo = CodigoRecuperacion(
+            usuario_id=usuario.id,
+            codigo=self.generador.numerico(6),
+            fecha_creacion=self.reloj.ahora(),
+        )
+        return self.codigos.crear(codigo)
+
+
+class RestablecerPassword:
+    def __init__(
+        self,
+        usuarios: UsuarioRepository,
+        codigos: CodigoRecuperacionRepository,
+        hasher: PasswordHasher,
+        reloj: Clock,
+    ):
+        self.usuarios = usuarios
+        self.codigos = codigos
+        self.hasher = hasher
+        self.reloj = reloj
+
+    def ejecutar(self, email: str, codigo: str, password_nueva: str) -> Usuario:
+        validar_password(password_nueva)
+        usuario = self.usuarios.obtener_por_email(email)
+        if usuario is None:
+            raise AuthenticationError("Código de recuperación inválido")
+
+        registro = self.codigos.obtener_vigente(usuario.id, codigo)
+        if registro is None:
+            raise AuthenticationError("Código de recuperación inválido")
+        if not registro.es_utilizable(self.reloj.ahora()):
+            registro.incrementar_intento()
+            self.codigos.actualizar(registro)
+            raise AuthenticationError("El código expiró o se agotaron los intentos")
+
+        registro.consumir()
+        self.codigos.actualizar(registro)
+
+        usuario.password_hash = self.hasher.hash(password_nueva)
+        return self.usuarios.actualizar(usuario)
+
+
+class CambiarPassword:
+    def __init__(self, usuarios: UsuarioRepository, hasher: PasswordHasher):
+        self.usuarios = usuarios
+        self.hasher = hasher
+
+    def ejecutar(self, usuario_id: int, password_actual: str, password_nueva: str) -> Usuario:
+        usuario = self.usuarios.obtener(usuario_id)
+        if usuario is None:
+            raise NotFoundError("Usuario", usuario_id)
+        if not self.hasher.verificar(password_actual, usuario.password_hash):
+            raise AuthenticationError("La contraseña actual no es correcta")
+        validar_password(password_nueva)
+        usuario.password_hash = self.hasher.hash(password_nueva)
+        return self.usuarios.actualizar(usuario)
+
+
+def validar_password(password: str) -> None:
+    """Política mínima, equivalente a los validadores de `settings.py`."""
+    if not password or len(password) < LONGITUD_MINIMA_PASSWORD:
+        raise ValidationError(
+            f"La contraseña debe tener al menos {LONGITUD_MINIMA_PASSWORD} caracteres", "password"
+        )
+    if password.isdigit():
+        raise ValidationError("La contraseña no puede ser sólo numérica", "password")
+
+
+def tipo_usuario(valor: str) -> TipoUsuario:
+    return TipoUsuario.desde(valor, campo="tipo")

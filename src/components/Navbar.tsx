@@ -9,7 +9,6 @@ import {
   Package, 
   ShieldCheck, 
   Stethoscope, 
-  Terminal, 
   UserCheck, 
   ShoppingCart,
   ChevronDown
@@ -23,8 +22,6 @@ interface NavbarProps {
   allUsers: User[];
   cartCount: number;
   onOpenCart: () => void;
-  onOpenApiDocs: () => void;
-  apiConnected: boolean;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -34,9 +31,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onSwitchUser,
   allUsers,
   cartCount,
-  onOpenCart,
-  onOpenApiDocs,
-  apiConnected
+  onOpenCart
 }) => {
   const [userDropdownOpen, setUserDropdownOpen] = React.useState(false);
 
@@ -53,32 +48,11 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   return (
     <header className="sticky top-0 z-40 shadow-md">
-      {/* Top Banner: FastAPI Status and Quick Switch (Legacy Primary Darker #1d4f60) */}
+      {/* Top Banner: Quick Switch (Legacy Primary Darker #1d4f60) */}
       <div className="bg-[#1d4f60] text-white text-xs px-4 py-1.5 flex flex-wrap items-center justify-between gap-2 border-b border-[#156a8e]/40">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5">
-            <span className={`inline-block w-2 h-2 rounded-full ${apiConnected ? 'bg-[#5dca88] animate-pulse' : 'bg-red-400'}`} />
-            <span className="font-semibold text-sky-100">FastAPI Backend:</span>
-            <span className={apiConnected ? 'text-[#5dca88] font-medium' : 'text-red-300'}>
-              {apiConnected ? 'Conectado (v2.0)' : 'Reconectando...'}
-            </span>
-          </div>
-          <span className="text-sky-300/40">|</span>
-          <span className="text-sky-100/80 hidden sm:inline">Mundo Peludo • FastAPI + React</span>
-        </div>
+        <span className="text-sky-100/80 hidden sm:inline">Mundo Peludo • Clínica Veterinaria</span>
 
         <div className="flex items-center gap-3">
-          <button
-            id="btn-fastapi-docs"
-            onClick={onOpenApiDocs}
-            className="flex items-center gap-1 text-[#9dddf5] hover:text-white font-medium transition-colors"
-          >
-            <Terminal className="w-3.5 h-3.5" />
-            <span>FastAPI Docs / Swagger</span>
-          </button>
-
-          <span className="text-sky-300/40 hidden md:inline">•</span>
-
           {/* Quick role selector */}
           <div className="relative">
             <button

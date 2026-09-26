@@ -346,7 +346,9 @@ export const CitasView: React.FC<CitasViewProps> = ({
                 >
                   {servicios.map((s) => (
                     <option key={s.id} value={s.id}>
-                      {s.nombre} - ${s.precio.toLocaleString('es-CL')} ({s.duracion_min} min)
+                      {s.nombre}
+                      {s.precio != null && ` - $${s.precio.toLocaleString('es-CL')}`}
+                      {s.duracion_min != null && ` (${s.duracion_min} min)`}
                     </option>
                   ))}
                 </select>

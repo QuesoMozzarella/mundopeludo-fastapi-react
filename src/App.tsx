@@ -22,7 +22,6 @@ import { HistorialView } from './components/HistorialView';
 import { InventarioView } from './components/InventarioView';
 import { DashboardView } from './components/DashboardView';
 import { CartModal } from './components/CartModal';
-import { FastApiModal } from './components/FastApiModal';
 import { AlertCircle, RefreshCw } from 'lucide-react';
 import {
   INITIAL_USERS,
@@ -38,7 +37,6 @@ import {
 
 export function App() {
   const [activeTab, setActiveTab] = useState<string>('inicio');
-  const [apiConnected, setApiConnected] = useState<boolean>(true);
   const [loading, setLoading] = useState<boolean>(false);
   const [errorBanner, setErrorBanner] = useState<string | null>(null);
 
@@ -59,7 +57,6 @@ export function App() {
 
   // Modals & Navigation Context
   const [cartModalOpen, setCartModalOpen] = useState(false);
-  const [fastApiModalOpen, setFastApiModalOpen] = useState(false);
   const [selectedPetForHistorial, setSelectedPetForHistorial] = useState<Mascota | null>(null);
   const [preselectedServicioId, setPreselectedServicioId] = useState<number | null>(null);
 
@@ -91,8 +88,7 @@ export function App() {
 
       // Check health safely (does not throw thanks to fallback)
       const health = await apiService.getHealth();
-      const isHealthy = health.status === 'healthy';
-      setApiConnected(isHealthy);
+      const isHealthy = health.status === 'ok';
 
       const [
         usersData,
@@ -135,7 +131,6 @@ export function App() {
       if (statsData) setStats(statsData);
 
       if (isHealthy) {
-        setApiConnected(true);
         setErrorBanner(null);
       } else if (!usersData && !mascotasData) {
         // Only show banner if neither health nor data could connect
@@ -143,7 +138,6 @@ export function App() {
       }
     } catch (err: any) {
       console.warn('Backend synchronization notice:', err?.message || err);
-      setApiConnected(false);
     } finally {
       setLoading(false);
     }
@@ -339,8 +333,6 @@ export function App() {
         allUsers={allUsers}
         cartCount={cartItems.reduce((acc, i) => acc + i.cantidad, 0)}
         onOpenCart={() => setCartModalOpen(true)}
-        onOpenApiDocs={() => setFastApiModalOpen(true)}
-        apiConnected={apiConnected}
       />
 
       {/* Error alert banner if any */}
@@ -459,7 +451,6 @@ export function App() {
                 citas={citas}
                 mascotas={mascotas}
                 onNavigate={handleNavigate}
-                onOpenFastApiDocs={() => setFastApiModalOpen(true)}
               />
             )}
           </>
@@ -501,12 +492,6 @@ export function App() {
             <p className="text-sky-200/80 leading-relaxed mb-3">
               Nueva versión moderna desarrollada con FastAPI v2.0 (Python), Node.js Express y React + Tailwind.
             </p>
-            <button
-              onClick={() => setFastApiModalOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#ff9f43] hover:bg-[#f08e30] text-white font-bold text-xs shadow-sm transition-all"
-            >
-              <span>Explorar Swagger API</span>
-            </button>
           </div>
         </div>
 
@@ -549,13 +534,6 @@ export function App() {
         onClearCart={handleClearCart}
         currentUser={currentUser}
         onCheckout={handleCheckout}
-      />
-
-      {/* FastAPI Swagger Explorer Modal */}
-      <FastApiModal
-        isOpen={fastApiModalOpen}
-        onClose={() => setFastApiModalOpen(false)}
-        apiConnected={apiConnected}
       />
     </div>
   );

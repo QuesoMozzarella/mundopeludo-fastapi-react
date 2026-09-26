@@ -22,8 +22,10 @@ export interface Servicio {
   id: number;
   nombre: string;
   descripcion: string;
-  duracion_min: number;
-  precio: number;
+  // El backend no los expone: la migracion 0007 de Django los elimino del
+  // modelo Servicio. Solo llegan desde los datos semilla del frontend.
+  duracion_min?: number;
+  precio?: number;
   activo: number;
 }
 

@@ -1,6 +1,6 @@
 # 🐾 MundoPeludo — Sistema de Gestión Veterinaria
 
-> **Stack Moderno**: **FastAPI** (Python 3.11) + **Node.js** (Express Proxy) + **React 18** (TypeScript, Tailwind CSS)
+> **Stack Moderno**: **FastAPI** (Python 3.11, arquitectura hexagonal sobre sqlite3) + **Node.js** (Express Proxy) + **React 18** (TypeScript, Tailwind CSS)
 
 Plataforma integral para clínicas veterinarias que gestiona pacientes, agenda de citas, historiales clínicos, centro de adopciones, farmacia/tienda con control de inventario y panel analítico para personal médico y tutores.
 
@@ -9,12 +9,18 @@ Plataforma integral para clínicas veterinarias que gestiona pacientes, agenda d
 ## 🚀 Arquitectura
 
 ```
-├── backend/                  # API REST con FastAPI y SQLite
-│   ├── main.py               # Endpoints REST y modelos Pydantic
-│   ├── database.py           # Conexión SQLite y esquema de tablas
+├── backend/                  # API REST con FastAPI, sqlite3 y arquitectura hexagonal
+│   ├── main.py               # Entrada ASGI (uvicorn backend.main:app)
 │   ├── seed.py               # Datos iniciales para pruebas
 │   ├── requirements.txt      # Dependencias Python
-│   └── mundopeludo.db        # Base de datos SQLite
+│   ├── README.md             # Arquitectura y mapa de modelos Django → dominio
+│   ├── data/                 # Base de datos SQLite generada
+│   ├── tests/                # Pruebas end-to-end de la API
+│   └── app/
+│       ├── domain/           # Núcleo: entidades, objetos de valor y puertos
+│       ├── application/      # Casos de uso
+│       ├── infrastructure/   # Adaptadores de salida (SQLite, hash, JWT)
+│       └── interfaces/http/  # Adaptador de entrada (routers y esquemas)
 ├── src/                      # Frontend SPA React 18 con TypeScript
 │   ├── components/           # Vistas (Citas, Mascotas, Tienda, Historial, etc.)
 │   ├── api.ts                # Capa cliente de comunicación con FastAPI
@@ -86,6 +92,31 @@ npm start
 
 ---
 
+## 🧩 Arquitectura Hexagonal del Backend
+
+El backend traduce los **15 modelos** del Django original a un núcleo de dominio
+independiente del framework, rodeado de puertos y adaptadores:
+
+* `app/domain/` — entidades, objetos de valor y puertos. No importa FastAPI ni sqlite3.
+* `app/application/` — casos de uso que orquestan el dominio.
+* `app/infrastructure/` — adaptadores de salida: repositorios SQLite, hash de
+  contraseñas `pbkdf2_sha256` compatible con Django y JWT HS256, todo con librería estándar.
+* `app/interfaces/http/` — adaptador de entrada: routers y esquemas Pydantic.
+
+El detalle completo, con la tabla de correspondencia modelo Django → entidad →
+tabla SQLite y las diferencias deliberadas, está en
+[`backend/README.md`](./backend/README.md).
+
+```bash
+python backend/seed.py            # datos de ejemplo
+python backend/tests/test_api.py  # 14 pruebas end-to-end, sin dependencias extra
+```
+
+---
+
 ## 📁 Versión Histórica (Django)
 
 La implementación anterior basada en Django 5.2 y MySQL ha sido preservada de forma íntegra en la carpeta [`legacy_django/`](./legacy_django/), junto con sus instrucciones y migraciones originales.
+
+> `backend/mundopeludo.db` es la base de la versión plana anterior de la API y
+> se conserva tal cual; la nueva se genera en `backend/data/mundopeludo.db`.

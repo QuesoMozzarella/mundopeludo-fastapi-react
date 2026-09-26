@@ -245,14 +245,20 @@ export const HomeView: React.FC<HomeViewProps> = ({
               className="card-mundo p-6 flex flex-col justify-between"
             >
               <div>
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-[#e2f5fc] text-[#156a8e]">
-                    ⏱️ {s.duracion_min} minutos
-                  </span>
-                  <span className="text-base font-extrabold text-[#ff9f43]">
-                    ${s.precio.toLocaleString('es-CL')}
-                  </span>
-                </div>
+                {(s.duracion_min != null || s.precio != null) && (
+                  <div className="flex items-center justify-between mb-3">
+                    {s.duracion_min != null && (
+                      <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-[#e2f5fc] text-[#156a8e]">
+                        ⏱️ {s.duracion_min} minutos
+                      </span>
+                    )}
+                    {s.precio != null && (
+                      <span className="text-base font-extrabold text-[#ff9f43]">
+                        ${s.precio.toLocaleString('es-CL')}
+                      </span>
+                    )}
+                  </div>
+                )}
                 <h3 className="text-lg font-bold text-slate-800 mb-2">{s.nombre}</h3>
                 <p className="text-sm text-slate-600 leading-relaxed mb-4">{s.descripcion}</p>
               </div>

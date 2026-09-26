@@ -17,18 +17,40 @@ function fastApiPlugin(): Plugin {
 
     req.on('error', () => {
       console.log('[Vite] Starting FastAPI backend on port 8001...');
-      fastApiProc = spawn('python3', [
-        '-m', 'uvicorn',
-        'backend.main:app',
-        '--host', '127.0.0.1',
-        '--port', '8001'
-      ], {
-        stdio: 'inherit'
-      });
+      // En Windows el intérprete se llama `python`; en Linux/macOS, `python3`.
+      const candidates = process.platform === 'win32'
+        ? ['python', 'py', 'python3']
+        : ['python3', 'python'];
 
-      fastApiProc.on('error', (err) => {
-        console.error('[Vite] Failed to start FastAPI process:', err);
-      });
+      const spawnWith = (index: number) => {
+        if (index >= candidates.length) {
+          console.error(
+            '[Vite] No se encontro Python. Instalalo o levanta el backend a mano: ' +
+            'python -m uvicorn backend.main:app --reload --port 8001'
+          );
+          return;
+        }
+
+        const proc = spawn(candidates[index], [
+          '-m', 'uvicorn',
+          'backend.main:app',
+          '--host', '127.0.0.1',
+          '--port', '8001'
+        ], {
+          stdio: 'inherit',
+          cwd: process.cwd()
+        });
+
+        proc.on('error', () => spawnWith(index + 1));
+        proc.on('exit', (code) => {
+          // El stub de la Microsoft Store sale con 9009 sin ejecutar nada.
+          if (fastApiProc === proc && code === 9009) spawnWith(index + 1);
+        });
+
+        fastApiProc = proc;
+      };
+
+      spawnWith(0);
     });
 
     req.setTimeout(500, () => {

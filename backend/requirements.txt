@@ -1,3 +1,12 @@
+# Ejecución
 fastapi>=0.110.0
-uvicorn>=0.28.0
+uvicorn[standard]>=0.28.0
 pydantic>=2.6.0
+
+# La persistencia usa sqlite3, que forma parte de la librería estándar.
+# El hash de contraseñas (pbkdf2_sha256) y el JWT HS256 también se resuelven
+# con la estándar (hashlib, hmac, secrets): no hay dependencias de seguridad.
+
+# Desarrollo (opcional)
+# pytest>=8.0        -> pytest backend/tests
+# httpx>=0.27        -> necesario sólo si prefieres fastapi.testclient
