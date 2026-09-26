@@ -3,12 +3,8 @@ from __future__ import annotations
 
 from fastapi import APIRouter, status
 
-from ....application.use_cases.carrito import (
-    ConsultarPedidos,
-    GestionarCarrito,
-    ProcesarCheckout,
-)
-from ..deps import AccesoDep, ReposDep, ServiciosDep
+from ..casos import ConsultarPedidosDep, GestionarCarritoDep, ProcesarCheckoutDep
+from ..deps import AccesoDep
 from ..schemas.inventario import (
     CantidadIn,
     CarritoOut,
@@ -20,29 +16,18 @@ from ..schemas.inventario import (
 router = APIRouter(prefix="/api", tags=["tienda"])
 
 
-def _carrito(repos: ReposDep, servicios: ServiciosDep) -> GestionarCarrito:
-    return GestionarCarrito(repos.carritos, repos.productos, repos.usuarios, servicios.reloj)
-
-
 @router.get("/carrito/{usuario_id}", response_model=CarritoOut, summary="Ver el carrito")
-def ver_carrito(
-    usuario_id: int, repos: ReposDep, servicios: ServiciosDep, acceso: AccesoDep
-) -> CarritoOut:
+def ver_carrito(usuario_id: int, carrito: GestionarCarritoDep, acceso: AccesoDep) -> CarritoOut:
     acceso.propietario(usuario_id)
-    return CarritoOut.desde(_carrito(repos, servicios).ver(usuario_id))
+    return CarritoOut.desde(carrito.ver(usuario_id))
 
 
 @router.post("/carrito/{usuario_id}", response_model=CarritoOut, summary="Agregar un producto")
 def agregar(
-    usuario_id: int,
-    datos: ItemCarritoIn,
-    repos: ReposDep,
-    servicios: ServiciosDep,
-    acceso: AccesoDep,
+    usuario_id: int, datos: ItemCarritoIn, carrito: GestionarCarritoDep, acceso: AccesoDep
 ) -> CarritoOut:
     acceso.propietario(usuario_id)
-    vista = _carrito(repos, servicios).agregar(usuario_id, datos.producto_id, datos.cantidad)
-    return CarritoOut.desde(vista)
+    return CarritoOut.desde(carrito.agregar(usuario_id, datos.producto_id, datos.cantidad))
 
 
 @router.put(
@@ -54,12 +39,11 @@ def actualizar_cantidad(
     usuario_id: int,
     producto_id: int,
     datos: CantidadIn,
-    repos: ReposDep,
-    servicios: ServiciosDep,
+    carrito: GestionarCarritoDep,
     acceso: AccesoDep,
 ) -> CarritoOut:
     acceso.propietario(usuario_id)
-    vista = _carrito(repos, servicios).actualizar_cantidad(usuario_id, producto_id, datos.cantidad)
+    vista = carrito.actualizar_cantidad(usuario_id, producto_id, datos.cantidad)
     return CarritoOut.desde(vista)
 
 
@@ -69,22 +53,16 @@ def actualizar_cantidad(
     summary="Quitar un producto del carrito",
 )
 def quitar(
-    usuario_id: int,
-    producto_id: int,
-    repos: ReposDep,
-    servicios: ServiciosDep,
-    acceso: AccesoDep,
+    usuario_id: int, producto_id: int, carrito: GestionarCarritoDep, acceso: AccesoDep
 ) -> CarritoOut:
     acceso.propietario(usuario_id)
-    return CarritoOut.desde(_carrito(repos, servicios).quitar(usuario_id, producto_id))
+    return CarritoOut.desde(carrito.quitar(usuario_id, producto_id))
 
 
 @router.delete("/carrito/{usuario_id}", response_model=CarritoOut, summary="Vaciar el carrito")
-def vaciar(
-    usuario_id: int, repos: ReposDep, servicios: ServiciosDep, acceso: AccesoDep
-) -> CarritoOut:
+def vaciar(usuario_id: int, carrito: GestionarCarritoDep, acceso: AccesoDep) -> CarritoOut:
     acceso.propietario(usuario_id)
-    return CarritoOut.desde(_carrito(repos, servicios).vaciar(usuario_id))
+    return CarritoOut.desde(carrito.vaciar(usuario_id))
 
 
 @router.post(
@@ -93,18 +71,8 @@ def vaciar(
     status_code=status.HTTP_201_CREATED,
     summary="Confirmar la compra del carrito",
 )
-def checkout(
-    datos: CheckoutIn, repos: ReposDep, servicios: ServiciosDep, acceso: AccesoDep
-) -> PedidoOut:
+def checkout(datos: CheckoutIn, caso: ProcesarCheckoutDep, acceso: AccesoDep) -> PedidoOut:
     acceso.propietario(datos.usuario_id)
-    caso = ProcesarCheckout(
-        repos.carritos,
-        repos.productos,
-        repos.pedidos,
-        repos.usuarios,
-        servicios.reloj,
-        repos.actividades,
-    )
     items = None
     if datos.items is not None:
         items = [(item.producto_id, item.cantidad) for item in datos.items]
@@ -114,14 +82,14 @@ def checkout(
 
 @router.get("/pedidos", response_model=list[PedidoOut], summary="Listar pedidos")
 def listar_pedidos(
-    repos: ReposDep, acceso: AccesoDep, usuario_id: int | None = None
+    consulta: ConsultarPedidosDep, acceso: AccesoDep, usuario_id: int | None = None
 ) -> list[PedidoOut]:
     usuario_id = acceso.filtro_propio(usuario_id)
-    return [PedidoOut.desde(p) for p in ConsultarPedidos(repos.pedidos).listar(usuario_id)]
+    return [PedidoOut.desde(p) for p in consulta.listar(usuario_id)]
 
 
 @router.get("/pedidos/{pedido_id}", response_model=PedidoOut, summary="Ver un pedido")
-def obtener_pedido(pedido_id: int, repos: ReposDep, acceso: AccesoDep) -> PedidoOut:
-    pedido = ConsultarPedidos(repos.pedidos).obtener(pedido_id)
+def obtener_pedido(pedido_id: int, consulta: ConsultarPedidosDep, acceso: AccesoDep) -> PedidoOut:
+    pedido = consulta.obtener(pedido_id)
     acceso.propietario(pedido.usuario_id)
     return PedidoOut.desde(pedido)

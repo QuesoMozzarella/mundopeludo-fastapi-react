@@ -3,16 +3,17 @@ from __future__ import annotations
 
 from fastapi import APIRouter, status
 
-from ....application.use_cases.autenticacion import (
-    AutenticarUsuario,
-    CambiarPassword,
-    RegistrarUsuario,
-    RestablecerPassword,
-    SolicitarCodigoRecuperacion,
-)
-from ....application.use_cases.usuarios import ConsultarUsuarios
+from ....application.use_cases.autenticacion import SesionIniciada
 from ....domain.value_objects import TipoUsuario
-from ..deps import AccesoDep, ConfigDep, ReposDep, ServiciosDep, UsuarioDep
+from ..casos import (
+    AutenticarUsuarioDep,
+    CambiarPasswordDep,
+    ConsultarUsuariosDep,
+    RegistrarUsuarioDep,
+    RestablecerPasswordDep,
+    SolicitarCodigoRecuperacionDep,
+)
+from ..deps import AccesoDep, ConfigDep, UsuarioDep
 from ..schemas.usuarios import (
     CambioPasswordIn,
     LoginIn,
@@ -26,24 +27,19 @@ from ..schemas.usuarios import (
 router = APIRouter(prefix="/api/auth", tags=["autenticación"])
 
 
-def _vista(repos: ReposDep, usuario_id: int) -> UsuarioOut:
-    consulta = ConsultarUsuarios(
-        repos.usuarios, repos.perfiles_cliente, repos.perfiles_veterinario, repos.especialidades
-    )
-    return UsuarioOut.desde(consulta.obtener(usuario_id))
-
-
-@router.post("/login", response_model=SesionOut, summary="Iniciar sesión")
-def login(datos: LoginIn, repos: ReposDep, servicios: ServiciosDep) -> SesionOut:
-    caso = AutenticarUsuario(
-        repos.usuarios, servicios.hasher, servicios.tokens, servicios.reloj, repos.actividades
-    )
-    sesion = caso.ejecutar(datos.email, datos.password)
+def _sesion_out(sesion: SesionIniciada, usuarios: ConsultarUsuariosDep) -> SesionOut:
     return SesionOut(
         access_token=sesion.token,
         expira_en_minutos=sesion.expira_en_minutos,
-        usuario=_vista(repos, sesion.usuario.id),
+        usuario=UsuarioOut.desde(usuarios.obtener(sesion.usuario.id)),
     )
+
+
+@router.post("/login", response_model=SesionOut, summary="Iniciar sesión")
+def login(
+    datos: LoginIn, caso: AutenticarUsuarioDep, usuarios: ConsultarUsuariosDep
+) -> SesionOut:
+    return _sesion_out(caso.ejecutar(datos.email, datos.password), usuarios)
 
 
 @router.post(
@@ -53,21 +49,17 @@ def login(datos: LoginIn, repos: ReposDep, servicios: ServiciosDep) -> SesionOut
     summary="Registrar una cuenta nueva",
 )
 def registrar(
-    datos: RegistroIn, repos: ReposDep, servicios: ServiciosDep, acceso: AccesoDep
+    datos: RegistroIn,
+    caso: RegistrarUsuarioDep,
+    autenticacion: AutenticarUsuarioDep,
+    usuarios: ConsultarUsuariosDep,
+    acceso: AccesoDep,
 ) -> SesionOut:
     # El registro público sólo da de alta clientes; las cuentas de personal
     # (veterinario, administrador) las crea un administrador.
     tipo = TipoUsuario.desde(datos.tipo, campo="tipo", por_defecto=TipoUsuario.CLIENTE)
     if tipo is not TipoUsuario.CLIENTE:
         acceso.solo_administrador()
-    caso = RegistrarUsuario(
-        repos.usuarios,
-        repos.perfiles_cliente,
-        repos.perfiles_veterinario,
-        servicios.hasher,
-        servicios.reloj,
-        repos.actividades,
-    )
     usuario = caso.ejecutar(
         email=datos.email,
         password=datos.password,
@@ -79,40 +71,29 @@ def registrar(
         documento=datos.documento,
         especialidades_ids=datos.especialidades_ids,
     )
-    token = servicios.tokens.emitir(usuario.id, {"email": usuario.email, "tipo": usuario.tipo.value})
-    return SesionOut(
-        access_token=token,
-        expira_en_minutos=servicios.tokens.minutos_vigencia,
-        usuario=_vista(repos, usuario.id),
-    )
+    return _sesion_out(autenticacion.sesion_para(usuario), usuarios)
 
 
 @router.get("/me", response_model=UsuarioOut, summary="Datos de la sesión activa")
-def yo(usuario: UsuarioDep, repos: ReposDep) -> UsuarioOut:
-    return _vista(repos, usuario.id)
+def yo(usuario: UsuarioDep, usuarios: ConsultarUsuariosDep) -> UsuarioOut:
+    return UsuarioOut.desde(usuarios.obtener(usuario.id))
 
 
 @router.post("/password/cambiar", response_model=UsuarioOut, summary="Cambiar la contraseña")
 def cambiar_password(
-    datos: CambioPasswordIn, usuario: UsuarioDep, repos: ReposDep, servicios: ServiciosDep
+    datos: CambioPasswordIn,
+    usuario: UsuarioDep,
+    caso: CambiarPasswordDep,
+    usuarios: ConsultarUsuariosDep,
 ) -> UsuarioOut:
-    CambiarPassword(repos.usuarios, servicios.hasher).ejecutar(
-        usuario.id, datos.password_actual, datos.password_nueva
-    )
-    return _vista(repos, usuario.id)
+    caso.ejecutar(usuario.id, datos.password_actual, datos.password_nueva)
+    return UsuarioOut.desde(usuarios.obtener(usuario.id))
 
 
 @router.post("/password/recuperar", summary="Solicitar un código de recuperación")
 def recuperar(
-    datos: RecuperacionIn, repos: ReposDep, servicios: ServiciosDep, configuracion: ConfigDep
+    datos: RecuperacionIn, caso: SolicitarCodigoRecuperacionDep, configuracion: ConfigDep
 ) -> dict:
-    caso = SolicitarCodigoRecuperacion(
-        repos.usuarios,
-        repos.codigos,
-        servicios.generador,
-        servicios.reloj,
-        servicios.notificaciones,
-    )
     codigo = caso.ejecutar(datos.email)
     respuesta = {
         "detail": "Si el correo está registrado, recibirás un código de 6 dígitos",
@@ -126,8 +107,8 @@ def recuperar(
 
 
 @router.post("/password/restablecer", response_model=UsuarioOut, summary="Restablecer con código")
-def restablecer(datos: RestablecerIn, repos: ReposDep, servicios: ServiciosDep) -> UsuarioOut:
-    caso = RestablecerPassword(repos.usuarios, repos.codigos, servicios.hasher, servicios.reloj)
+def restablecer(
+    datos: RestablecerIn, caso: RestablecerPasswordDep, usuarios: ConsultarUsuariosDep
+) -> UsuarioOut:
     usuario = caso.ejecutar(datos.email, datos.codigo, datos.password_nueva)
-    return _vista(repos, usuario.id)
-
+    return UsuarioOut.desde(usuarios.obtener(usuario.id))

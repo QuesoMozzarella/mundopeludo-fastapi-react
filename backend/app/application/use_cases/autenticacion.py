@@ -164,23 +164,25 @@ class AutenticarUsuario:
 
         usuario.registrar_acceso(ahora)
         self.usuarios.actualizar(usuario)
-
-        token = self.tokens.emitir(
-            usuario.id, {"email": usuario.email, "tipo": usuario.tipo.value}
-        )
         if self.actividades:
             self.actividades.registrar(
                 ActividadSistema(
                     usuario=usuario.email,
                     tipo="login",
                     descripcion="Inicio de sesión correcto",
-                    fecha=self.reloj.ahora(),
+                    fecha=ahora,
                 )
             )
+        return self.sesion_para(usuario)
+
+    def sesion_para(self, usuario: Usuario) -> SesionIniciada:
+        """Emite el JWT de un usuario ya verificado (tras el login o al registrarse)."""
+        token = self.tokens.emitir(
+            usuario.id, {"email": usuario.email, "tipo": usuario.tipo.value}
+        )
         return SesionIniciada(
             usuario=usuario, token=token, expira_en_minutos=self.tokens.minutos_vigencia
         )
-
 
     _senuelo: str | None = None
 

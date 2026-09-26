@@ -3,12 +3,8 @@ from __future__ import annotations
 
 from fastapi import APIRouter, status
 
-from ....application.use_cases.sistema import (
-    ConsultarActividad,
-    ObtenerEstadisticas,
-    RegistrarActividad,
-)
-from ..deps import ReposDep, ServiciosDep, SoloPersonal
+from ..casos import ConsultarActividadDep, ObtenerEstadisticasDep, RegistrarActividadDep
+from ..deps import SoloPersonal
 from ..schemas.sistema import ActividadIn, ActividadOut, EstadisticasOut, SaludOut
 
 router = APIRouter(prefix="/api", tags=["sistema"])
@@ -27,9 +23,9 @@ def salud() -> SaludOut:
     dependencies=[SoloPersonal],
 )
 def listar_actividad(
-    repos: ReposDep, limite: int = 50, tipo: str | None = None
+    consulta: ConsultarActividadDep, limite: int = 50, tipo: str | None = None
 ) -> list[ActividadOut]:
-    return [ActividadOut.desde(a) for a in ConsultarActividad(repos.actividades).listar(limite, tipo)]
+    return [ActividadOut.desde(a) for a in consulta.listar(limite, tipo)]
 
 
 @router.post(
@@ -39,10 +35,7 @@ def listar_actividad(
     summary="Registrar una entrada en la bitácora",
     dependencies=[SoloPersonal],
 )
-def registrar_actividad(
-    datos: ActividadIn, repos: ReposDep, servicios: ServiciosDep
-) -> ActividadOut:
-    caso = RegistrarActividad(repos.actividades, servicios.reloj)
+def registrar_actividad(datos: ActividadIn, caso: RegistrarActividadDep) -> ActividadOut:
     return ActividadOut.desde(caso.ejecutar(datos.usuario, datos.tipo, datos.descripcion))
 
 
@@ -52,15 +45,5 @@ def registrar_actividad(
     summary="Indicadores del panel",
     dependencies=[SoloPersonal],
 )
-def estadisticas(repos: ReposDep, servicios: ServiciosDep) -> EstadisticasOut:
-    caso = ObtenerEstadisticas(
-        repos.usuarios,
-        repos.mascotas,
-        repos.solicitudes,
-        repos.citas,
-        repos.historiales,
-        repos.productos,
-        repos.pedidos,
-        servicios.reloj,
-    )
+def estadisticas(caso: ObtenerEstadisticasDep) -> EstadisticasOut:
     return EstadisticasOut.desde(caso.ejecutar())

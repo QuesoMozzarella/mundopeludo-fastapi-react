@@ -3,15 +3,16 @@ from __future__ import annotations
 
 from fastapi import APIRouter, status
 
-from ....application.use_cases.adopciones import (
-    CancelarSolicitudAdopcion,
-    ConsultarSolicitudesAdopcion,
-    PublicarMascotaEnAdopcion,
-    ResolverSolicitudAdopcion,
-    SolicitarAdopcion,
+from ....domain.value_objects import EstadoAdopcion
+from ..casos import (
+    CancelarSolicitudAdopcionDep,
+    ConsultarMascotasDep,
+    ConsultarSolicitudesAdopcionDep,
+    PublicarMascotaEnAdopcionDep,
+    ResolverSolicitudAdopcionDep,
+    SolicitarAdopcionDep,
 )
-from ....application.use_cases.mascotas import ConsultarMascotas
-from ..deps import AccesoDep, ReposDep, ServiciosDep, SoloPersonal
+from ..deps import AccesoDep, SoloPersonal
 from ..schemas.mascotas import (
     CancelacionIn,
     MascotaOut,
@@ -23,14 +24,10 @@ from ..schemas.mascotas import (
 router = APIRouter(prefix="/api/adopciones", tags=["adopciones"])
 
 
-def _consulta(repos: ReposDep) -> ConsultarSolicitudesAdopcion:
-    return ConsultarSolicitudesAdopcion(repos.solicitudes, repos.mascotas, repos.usuarios)
-
-
 @router.get("", response_model=list[MascotaOut], summary="Mascotas publicadas en adopción")
-def listar_disponibles(repos: ReposDep) -> list[MascotaOut]:
-    caso = ConsultarMascotas(repos.mascotas, repos.especies, repos.usuarios)
-    return [MascotaOut.desde(v) for v in caso.listar(estado_adopcion="en_adopcion")]
+def listar_disponibles(mascotas: ConsultarMascotasDep) -> list[MascotaOut]:
+    disponibles = mascotas.listar(estado_adopcion=EstadoAdopcion.EN_ADOPCION.value)
+    return [MascotaOut.desde(v) for v in disponibles]
 
 
 @router.put(
@@ -39,10 +36,11 @@ def listar_disponibles(repos: ReposDep) -> list[MascotaOut]:
     summary="Publicar una mascota en adopción",
     dependencies=[SoloPersonal],
 )
-def publicar(mascota_id: int, repos: ReposDep) -> MascotaOut:
-    PublicarMascotaEnAdopcion(repos.mascotas).publicar(mascota_id)
-    consulta = ConsultarMascotas(repos.mascotas, repos.especies, repos.usuarios)
-    return MascotaOut.desde(consulta.obtener(mascota_id))
+def publicar(
+    mascota_id: int, caso: PublicarMascotaEnAdopcionDep, mascotas: ConsultarMascotasDep
+) -> MascotaOut:
+    caso.publicar(mascota_id)
+    return MascotaOut.desde(mascotas.obtener(mascota_id))
 
 
 @router.put(
@@ -51,17 +49,18 @@ def publicar(mascota_id: int, repos: ReposDep) -> MascotaOut:
     summary="Retirar una mascota de adopción",
     dependencies=[SoloPersonal],
 )
-def retirar(mascota_id: int, repos: ReposDep) -> MascotaOut:
-    PublicarMascotaEnAdopcion(repos.mascotas).retirar(mascota_id)
-    consulta = ConsultarMascotas(repos.mascotas, repos.especies, repos.usuarios)
-    return MascotaOut.desde(consulta.obtener(mascota_id))
+def retirar(
+    mascota_id: int, caso: PublicarMascotaEnAdopcionDep, mascotas: ConsultarMascotasDep
+) -> MascotaOut:
+    caso.retirar(mascota_id)
+    return MascotaOut.desde(mascotas.obtener(mascota_id))
 
 
 @router.get(
     "/solicitudes", response_model=list[SolicitudAdopcionOut], summary="Listar solicitudes"
 )
 def listar_solicitudes(
-    repos: ReposDep,
+    consulta: ConsultarSolicitudesAdopcionDep,
     acceso: AccesoDep,
     cliente_id: int | None = None,
     mascota_id: int | None = None,
@@ -69,8 +68,7 @@ def listar_solicitudes(
 ) -> list[SolicitudAdopcionOut]:
     cliente_id = acceso.filtro_propio(cliente_id)
     return [
-        SolicitudAdopcionOut.desde(v)
-        for v in _consulta(repos).listar(cliente_id, mascota_id, estado)
+        SolicitudAdopcionOut.desde(v) for v in consulta.listar(cliente_id, mascota_id, estado)
     ]
 
 
@@ -80,9 +78,9 @@ def listar_solicitudes(
     summary="Ver una solicitud",
 )
 def obtener_solicitud(
-    solicitud_id: int, repos: ReposDep, acceso: AccesoDep
+    solicitud_id: int, consulta: ConsultarSolicitudesAdopcionDep, acceso: AccesoDep
 ) -> SolicitudAdopcionOut:
-    vista = _consulta(repos).obtener(solicitud_id)
+    vista = consulta.obtener(solicitud_id)
     acceso.propietario(vista.solicitud.cliente_id)
     return SolicitudAdopcionOut.desde(vista)
 
@@ -94,14 +92,14 @@ def obtener_solicitud(
     summary="Postular a una adopción",
 )
 def crear_solicitud(
-    datos: SolicitudAdopcionIn, repos: ReposDep, servicios: ServiciosDep, acceso: AccesoDep
+    datos: SolicitudAdopcionIn,
+    caso: SolicitarAdopcionDep,
+    consulta: ConsultarSolicitudesAdopcionDep,
+    acceso: AccesoDep,
 ) -> SolicitudAdopcionOut:
     acceso.propietario(datos.cliente_id)
-    caso = SolicitarAdopcion(
-        repos.solicitudes, repos.mascotas, repos.usuarios, servicios.reloj, repos.actividades
-    )
     solicitud = caso.ejecutar(datos.mascota_id, datos.cliente_id, datos.notas_cliente)
-    return SolicitudAdopcionOut.desde(_consulta(repos).obtener(solicitud.id))
+    return SolicitudAdopcionOut.desde(consulta.obtener(solicitud.id))
 
 
 @router.put(
@@ -113,17 +111,14 @@ def crear_solicitud(
 def aprobar(
     solicitud_id: int,
     datos: RevisionIn,
-    repos: ReposDep,
-    servicios: ServiciosDep,
+    caso: ResolverSolicitudAdopcionDep,
+    consulta: ConsultarSolicitudesAdopcionDep,
     acceso: AccesoDep,
 ) -> SolicitudAdopcionOut:
     # El revisor es quien firma: nadie revisa en nombre de otro veterinario.
     acceso.propietario(datos.revisor_id, personal=False)
-    caso = ResolverSolicitudAdopcion(
-        repos.solicitudes, repos.mascotas, repos.usuarios, servicios.reloj, repos.actividades
-    )
     caso.aprobar(solicitud_id, datos.revisor_id, datos.notas)
-    return SolicitudAdopcionOut.desde(_consulta(repos).obtener(solicitud_id))
+    return SolicitudAdopcionOut.desde(consulta.obtener(solicitud_id))
 
 
 @router.put(
@@ -135,16 +130,13 @@ def aprobar(
 def rechazar(
     solicitud_id: int,
     datos: RevisionIn,
-    repos: ReposDep,
-    servicios: ServiciosDep,
+    caso: ResolverSolicitudAdopcionDep,
+    consulta: ConsultarSolicitudesAdopcionDep,
     acceso: AccesoDep,
 ) -> SolicitudAdopcionOut:
     acceso.propietario(datos.revisor_id, personal=False)
-    caso = ResolverSolicitudAdopcion(
-        repos.solicitudes, repos.mascotas, repos.usuarios, servicios.reloj, repos.actividades
-    )
     caso.rechazar(solicitud_id, datos.revisor_id, datos.notas)
-    return SolicitudAdopcionOut.desde(_consulta(repos).obtener(solicitud_id))
+    return SolicitudAdopcionOut.desde(consulta.obtener(solicitud_id))
 
 
 @router.put(
@@ -155,11 +147,10 @@ def rechazar(
 def cancelar(
     solicitud_id: int,
     datos: CancelacionIn,
-    repos: ReposDep,
-    servicios: ServiciosDep,
+    caso: CancelarSolicitudAdopcionDep,
+    consulta: ConsultarSolicitudesAdopcionDep,
     acceso: AccesoDep,
 ) -> SolicitudAdopcionOut:
     acceso.propietario(datos.cliente_id)
-    caso = CancelarSolicitudAdopcion(repos.solicitudes, repos.mascotas, servicios.reloj)
     caso.ejecutar(solicitud_id, datos.cliente_id)
-    return SolicitudAdopcionOut.desde(_consulta(repos).obtener(solicitud_id))
+    return SolicitudAdopcionOut.desde(consulta.obtener(solicitud_id))

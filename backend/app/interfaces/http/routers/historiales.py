@@ -3,26 +3,20 @@ from __future__ import annotations
 
 from fastapi import APIRouter, status
 
-from ....application.use_cases.historiales import (
-    ActualizarHistorial,
-    ConsultarHistoriales,
-    RegistrarHistorial,
-)
-from ..deps import AccesoDep, ReposDep, ServiciosDep, SoloPersonal
+from ..casos import ActualizarHistorialDep, ConsultarHistorialesDep, RegistrarHistorialDep
+from ..deps import AccesoDep, SoloPersonal
 from ..schemas.citas import HistorialActualizarIn, HistorialIn, HistorialOut
 
 router = APIRouter(prefix="/api", tags=["historiales médicos"])
 
 
-def _consulta(repos: ReposDep) -> ConsultarHistoriales:
-    return ConsultarHistoriales(repos.historiales, repos.citas, repos.mascotas, repos.usuarios)
-
-
+# `/historiales` es un alias histórico que usaba el cliente anterior.
 @router.get(
     "/historiales-medicos", response_model=list[HistorialOut], summary="Listar historiales"
 )
+@router.get("/historiales", response_model=list[HistorialOut], include_in_schema=False)
 def listar(
-    repos: ReposDep,
+    consulta: ConsultarHistorialesDep,
     acceso: AccesoDep,
     mascota_id: int | None = None,
     veterinario_id: int | None = None,
@@ -30,16 +24,17 @@ def listar(
 ) -> list[HistorialOut]:
     cliente_id = acceso.filtro_propio(cliente_id)
     return [
-        HistorialOut.desde(v)
-        for v in _consulta(repos).listar(mascota_id, veterinario_id, cliente_id)
+        HistorialOut.desde(v) for v in consulta.listar(mascota_id, veterinario_id, cliente_id)
     ]
 
 
 @router.get(
     "/historiales-medicos/{historial_id}", response_model=HistorialOut, summary="Ver un historial"
 )
-def obtener(historial_id: int, repos: ReposDep, acceso: AccesoDep) -> HistorialOut:
-    vista = _consulta(repos).obtener(historial_id)
+def obtener(
+    historial_id: int, consulta: ConsultarHistorialesDep, acceso: AccesoDep
+) -> HistorialOut:
+    vista = consulta.obtener(historial_id)
     acceso.propietario(vista.cliente_id)
     return HistorialOut.desde(vista)
 
@@ -48,25 +43,27 @@ def obtener(historial_id: int, repos: ReposDep, acceso: AccesoDep) -> HistorialO
     "/historiales-medicos",
     response_model=HistorialOut,
     status_code=status.HTTP_201_CREATED,
-    summary="Registrar la ficha clínica de una cita",
+    summary="Registrar la ficha clínica de una mascota (con o sin cita)",
+    dependencies=[SoloPersonal],
+)
+@router.post(
+    "/historiales",
+    response_model=HistorialOut,
+    status_code=status.HTTP_201_CREATED,
+    include_in_schema=False,
     dependencies=[SoloPersonal],
 )
 def crear(
-    datos: HistorialIn, repos: ReposDep, servicios: ServiciosDep, acceso: AccesoDep
+    datos: HistorialIn,
+    caso: RegistrarHistorialDep,
+    consulta: ConsultarHistorialesDep,
+    acceso: AccesoDep,
 ) -> HistorialOut:
     if datos.veterinario_id is not None:
         # Quien firma la ficha es el veterinario de la sesión (o un admin).
         acceso.propietario(datos.veterinario_id, personal=False)
-    caso = RegistrarHistorial(
-        repos.historiales,
-        repos.citas,
-        repos.mascotas,
-        repos.usuarios,
-        repos.estados_cita,
-        servicios.reloj,
-    )
     historial = caso.ejecutar(datos.model_dump())
-    return HistorialOut.desde(_consulta(repos).obtener(historial.id))
+    return HistorialOut.desde(consulta.obtener(historial.id))
 
 
 @router.put(
@@ -76,12 +73,13 @@ def crear(
     dependencies=[SoloPersonal],
 )
 def actualizar(
-    historial_id: int, datos: HistorialActualizarIn, repos: ReposDep
+    historial_id: int,
+    datos: HistorialActualizarIn,
+    caso: ActualizarHistorialDep,
+    consulta: ConsultarHistorialesDep,
 ) -> HistorialOut:
-    ActualizarHistorial(repos.historiales).ejecutar(
-        historial_id, datos.model_dump(exclude_unset=True)
-    )
-    return HistorialOut.desde(_consulta(repos).obtener(historial_id))
+    caso.ejecutar(historial_id, datos.model_dump(exclude_unset=True))
+    return HistorialOut.desde(consulta.obtener(historial_id))
 
 
 @router.delete(
@@ -90,32 +88,5 @@ def actualizar(
     summary="Eliminar un historial",
     dependencies=[SoloPersonal],
 )
-def eliminar(historial_id: int, repos: ReposDep) -> None:
-    ActualizarHistorial(repos.historiales).eliminar(historial_id)
-
-
-# Alias histórico usado por el cliente actual.
-@router.get(
-    "/historiales", response_model=list[HistorialOut], include_in_schema=False
-)
-def listar_alias(
-    repos: ReposDep,
-    acceso: AccesoDep,
-    mascota_id: int | None = None,
-    veterinario_id: int | None = None,
-    cliente_id: int | None = None,
-) -> list[HistorialOut]:
-    return listar(repos, acceso, mascota_id, veterinario_id, cliente_id)
-
-
-@router.post(
-    "/historiales",
-    response_model=HistorialOut,
-    status_code=status.HTTP_201_CREATED,
-    include_in_schema=False,
-    dependencies=[SoloPersonal],
-)
-def crear_alias(
-    datos: HistorialIn, repos: ReposDep, servicios: ServiciosDep, acceso: AccesoDep
-) -> HistorialOut:
-    return crear(datos, repos, servicios, acceso)
+def eliminar(historial_id: int, caso: ActualizarHistorialDep) -> None:
+    caso.eliminar(historial_id)
