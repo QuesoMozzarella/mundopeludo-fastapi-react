@@ -19,6 +19,7 @@ cargar_env()  # antes de importar la configuración
 from app.application.use_cases.autenticacion import RegistrarUsuario  # noqa: E402
 from app.application.use_cases.citas import (  # noqa: E402
     AgendarCita,
+    AvisosDeCita,
     AgendarCitaCmd,
     ReglasDeAgenda,
 )
@@ -37,6 +38,7 @@ from app.application.use_cases.mascotas import (  # noqa: E402
 )
 from app.domain.model.cita import Servicio  # noqa: E402
 from app.domain.model.usuario import Especialidad  # noqa: E402
+from app.infrastructure.notificaciones.adaptadores import NotificacionesEnRegistro  # noqa: E402
 from app.interfaces.http.deps import Contenedor  # noqa: E402
 
 PASSWORD_DEMO = "mundopeludo2025"
@@ -202,7 +204,13 @@ def poblar() -> None:
             repos.disponibilidades,
             servicios_tec.reloj,
         )
-        agendar = AgendarCita(repos.citas, repos.mascotas, repos.estados_cita, reglas)
+        # Los datos de ejemplo usan correos ficticios: los avisos sólo se registran
+        # en el log, nunca se envían.
+        sin_correo = NotificacionesEnRegistro()
+        avisos = AvisosDeCita(
+            repos.mascotas, repos.usuarios, repos.servicios, repos.estados_cita, sin_correo
+        )
+        agendar = AgendarCita(repos.citas, repos.mascotas, repos.estados_cita, reglas, avisos)
         cita = agendar.ejecutar(
             AgendarCitaCmd(
                 mascota_id=luna.id,
@@ -220,6 +228,7 @@ def poblar() -> None:
             repos.usuarios,
             repos.estados_cita,
             servicios_tec.reloj,
+            sin_correo,
         ).ejecutar(
             RegistrarHistorialCmd(
                 cita_id=cita.id,

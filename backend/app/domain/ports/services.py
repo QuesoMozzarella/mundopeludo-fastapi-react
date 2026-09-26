@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from datetime import date, datetime
 
 from ..model.sistema import CodigoRecuperacion
@@ -44,6 +45,33 @@ class Clock(ABC):
         return self.ahora().date()
 
 
+@dataclass(frozen=True)
+class AvisoCita:
+    """Lo que el tutor necesita saber de una cita, ya resuelto a textos."""
+
+    email: str
+    nombre: str
+    mascota: str
+    fecha_hora: datetime
+    veterinario: str
+    servicio: str
+    motivo: str
+
+
+@dataclass(frozen=True)
+class AvisoHistorial:
+    """Resumen de la ficha clínica que recibe el tutor de la mascota."""
+
+    email: str
+    nombre: str
+    mascota: str
+    fecha: datetime
+    veterinario: str
+    diagnostico: str
+    tratamiento: str
+    observaciones: str | None = None
+
+
 class Notificaciones(ABC):
     """Avisos a los usuarios. Hoy salen por correo; el dominio no lo sabe.
 
@@ -53,6 +81,15 @@ class Notificaciones(ABC):
 
     @abstractmethod
     def codigo_recuperacion(self, usuario: Usuario, codigo: CodigoRecuperacion) -> None: ...
+
+    @abstractmethod
+    def cita_confirmada(self, aviso: AvisoCita) -> None: ...
+
+    @abstractmethod
+    def cita_cancelada(self, aviso: AvisoCita) -> None: ...
+
+    @abstractmethod
+    def historial_registrado(self, aviso: AvisoHistorial) -> None: ...
 
 
 class GeneradorCodigos(ABC):

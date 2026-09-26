@@ -17,12 +17,14 @@ from ...domain.ports.repositories import (
     ServicioRepository,
     UsuarioRepository,
 )
-from ...domain.ports.services import Clock
+from ...domain.ports.services import AvisoCita, Clock, Notificaciones
 from ...domain.value_objects import hora_local
 from ..cambios import SIN_CAMBIO, Cambio, enviado, nuevo, nuevo_o_vacio
 from ..read_models import CitaVista, DisponibilidadVista, ServicioVista
 
 MINUTOS_ENTRE_CITAS = 30
+ESTADO_CONFIRMADA = "Confirmada"
+ESTADO_CANCELADA = "Cancelada"
 
 
 # ------------------------------- comandos -------------------------------
@@ -261,7 +263,9 @@ class DeclararDisponibilidad:
         self.disponibilidades = disponibilidades
         self.usuarios = usuarios
 
-    def ejecutar(self, veterinario_id: int, dia_semana: int, hora_inicio, hora_fin) -> Disponibilidad:
+    def ejecutar(
+        self, veterinario_id: int, dia_semana: int, hora_inicio, hora_fin
+    ) -> Disponibilidad:
         usuario = self.usuarios.obtener(veterinario_id)
         if usuario is None:
             raise NotFoundError("Usuario", veterinario_id)
@@ -434,6 +438,60 @@ def _resolver_estado(estados: EstadoCitaRepository, estado_id, nombre) -> Estado
     return estado
 
 
+class AvisosDeCita:
+    """Avisa por correo al tutor cuando una cita pasa a Confirmada o Cancelada."""
+
+    def __init__(
+        self,
+        mascotas: MascotaRepository,
+        usuarios: UsuarioRepository,
+        servicios: ServicioRepository,
+        estados: EstadoCitaRepository,
+        notificaciones: Notificaciones,
+    ):
+        self.mascotas = mascotas
+        self.usuarios = usuarios
+        self.servicios = servicios
+        self.estados = estados
+        self.notificaciones = notificaciones
+
+    def tras_cambio_de_estado(self, cita: Cita, estado_anterior_id: int | None) -> None:
+        if cita.estado_id == estado_anterior_id:
+            return
+        estado = self.estados.obtener(cita.estado_id)
+        if estado is None or estado.nombre not in (ESTADO_CONFIRMADA, ESTADO_CANCELADA):
+            return
+        aviso = self._aviso(cita)
+        if aviso is None:
+            return
+        if estado.nombre == ESTADO_CONFIRMADA:
+            self.notificaciones.cita_confirmada(aviso)
+        else:
+            self.notificaciones.cita_cancelada(aviso)
+
+    def _aviso(self, cita: Cita) -> AvisoCita | None:
+        """None si no hay a quién avisar (mascota sin tutor o tutor de baja)."""
+        mascota = self.mascotas.obtener(cita.mascota_id)
+        tutor = (
+            self.usuarios.obtener(mascota.cliente_id)
+            if mascota and mascota.cliente_id
+            else None
+        )
+        if tutor is None or not tutor.is_active:
+            return None
+        veterinario = self.usuarios.obtener(cita.veterinario_id)
+        servicio = self.servicios.obtener(cita.servicio_id)
+        return AvisoCita(
+            email=tutor.email,
+            nombre=tutor.nombre_completo,
+            mascota=mascota.nombre,
+            fecha_hora=cita.fecha_hora,
+            veterinario=veterinario.nombre_completo if veterinario else "",
+            servicio=servicio.nombre if servicio else "",
+            motivo=cita.motivo,
+        )
+
+
 class AgendarCita:
     """Alta de cita con las reglas que en Django vivían en formularios y señales."""
 
@@ -443,11 +501,13 @@ class AgendarCita:
         mascotas: MascotaRepository,
         estados: EstadoCitaRepository,
         reglas: ReglasDeAgenda,
+        avisos: AvisosDeCita,
     ):
         self.citas = citas
         self.mascotas = mascotas
         self.estados = estados
         self.reglas = reglas
+        self.avisos = avisos
 
     def ejecutar(self, cmd: AgendarCitaCmd) -> Cita:
         mascota = self.mascotas.obtener(cmd.mascota_id)
@@ -471,7 +531,10 @@ class AgendarCita:
             notas=cmd.notas,
         )
         self.reglas.horario(cita)
-        return self.citas.crear(cita)
+        cita = self.citas.crear(cita)
+        # Una cita puede nacer ya confirmada (p. ej. la agenda el personal).
+        self.avisos.tras_cambio_de_estado(cita, estado_anterior_id=None)
+        return cita
 
 
 class ActualizarCita:
@@ -480,10 +543,12 @@ class ActualizarCita:
         citas: CitaRepository,
         estados: EstadoCitaRepository,
         reglas: ReglasDeAgenda,
+        avisos: AvisosDeCita,
     ):
         self.citas = citas
         self.estados = estados
         self.reglas = reglas
+        self.avisos = avisos
 
     def ejecutar(self, cita_id: int, cmd: ActualizarCitaCmd) -> Cita:
         actual = _cita_o_error(self.citas, cita_id)
@@ -515,18 +580,26 @@ class ActualizarCita:
             veterinario = self.reglas.veterinario(actualizada.veterinario_id)
             self.reglas.servicio(actualizada.servicio_id, veterinario)
             self.reglas.horario(actualizada)
-        return self.citas.actualizar(actualizada)
+        actualizada = self.citas.actualizar(actualizada)
+        self.avisos.tras_cambio_de_estado(actualizada, actual.estado_id)
+        return actualizada
 
 
 class CambiarEstadoCita:
-    def __init__(self, citas: CitaRepository, estados: EstadoCitaRepository):
+    def __init__(
+        self, citas: CitaRepository, estados: EstadoCitaRepository, avisos: AvisosDeCita
+    ):
         self.citas = citas
         self.estados = estados
+        self.avisos = avisos
 
     def ejecutar(self, cita_id: int, estado_id=None, estado: str | None = None) -> Cita:
         cita = _cita_o_error(self.citas, cita_id)
+        anterior = cita.estado_id
         cita.cambiar_estado(_resolver_estado(self.estados, estado_id, estado).id)
-        return self.citas.actualizar(cita)
+        cita = self.citas.actualizar(cita)
+        self.avisos.tras_cambio_de_estado(cita, anterior)
+        return cita
 
 
 class EliminarCita:

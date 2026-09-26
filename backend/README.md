@@ -203,10 +203,19 @@ Los **15 modelos** del proyecto original están cubiertos:
   arrancar.
 * **Correo**: el `EMAIL_BACKEND` SMTP de Django se sustituye por el puerto
   `Notificaciones` y su adaptador `CorreoSmtp` (`smtplib`, sin dependencias).
-  Hoy envía el código de recuperación de contraseña con la misma plantilla que
-  la vista de Django. Si el envío falla, la API responde 503 y no deja un código
-  activo. Sin `MP_EMAIL_HOST` no se envía nada y, fuera de producción, el código
-  vuelve en `codigo_debug` para poder probar.
+  Envía:
+  * el **código de recuperación** de contraseña, con la plantilla de la vista de
+    Django. Es síncrono: si falla, la API responde 503 y no deja un código activo;
+  * al tutor de la mascota, los **avisos** de cita **confirmada**, cita
+    **cancelada** e **historia clínica** registrada (`AvisosDeCita` y
+    `RegistrarHistorial`). Se acumulan durante la petición y salen *después del
+    commit*, en segundo plano: no retienen el cerrojo de SQLite, no se envían si
+    la operación falla y un error de SMTP sólo queda en el log, sin tumbar la
+    operación. Mascotas sin tutor o tutores dados de baja no generan aviso.
+
+  Sin `MP_EMAIL_HOST` no se envía nada y, fuera de producción, el código de
+  recuperación vuelve en `codigo_debug` para poder probar. `seed.py` nunca envía
+  correos: sus cuentas de ejemplo son ficticias.
 * **Imágenes de producto**: se suben en base64 dentro del JSON
   (`POST /api/productos/{id}/imagenes`) en vez de `multipart/form-data`, para no
   depender de `python-multipart`. Los bytes se guardan en la base, igual que el

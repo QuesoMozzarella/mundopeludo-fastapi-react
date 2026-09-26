@@ -906,6 +906,7 @@ class _BuzonFalso:
 
     def __init__(self, falla: bool = False):
         self.enviados = []
+        self.avisos = []
         self.falla = falla
 
     def codigo_recuperacion(self, usuario, codigo):
@@ -914,6 +915,22 @@ class _BuzonFalso:
 
             raise ServicioNoDisponibleError("SMTP caído")
         self.enviados.append((usuario.email, codigo.codigo))
+
+    def _aviso(self, tipo, aviso):
+        if self.falla:
+            from app.domain.errors import ServicioNoDisponibleError
+
+            raise ServicioNoDisponibleError("SMTP caído")
+        self.avisos.append((tipo, aviso))
+
+    def cita_confirmada(self, aviso):
+        self._aviso("confirmada", aviso)
+
+    def cita_cancelada(self, aviso):
+        self._aviso("cancelada", aviso)
+
+    def historial_registrado(self, aviso):
+        self._aviso("historial", aviso)
 
 
 def test_recuperacion_envia_el_codigo_por_correo():
@@ -1260,6 +1277,101 @@ def test_actualizacion_parcial_distingue_ausente_null_y_valor():
     ).json()
     r = cli.put(f"/api/servicios/{servicio['id']}", {"veterinarios_ids": None, "descripcion": "Corte"})
     assert r.json()["veterinarios_ids"] == [vet["id"]] and r.json()["descripcion"] == "Corte", r
+
+
+def _con_buzon(buzon):
+    """Cliente con los avisos síncronos y entregados a un buzón de prueba."""
+    ruta = os.path.join(tempfile.mkdtemp(prefix="mundopeludo-avisos-"), "prueba.db")
+    app = create_app(Config(ruta_bd=ruta, secreto_jwt="s", exigir_auth=False, correo_host=""))
+    app.state.contenedor.servicios.notificaciones = buzon
+    app.state.contenedor.avisos_sincronos = True
+    return crear_cliente(app)
+
+
+def _mascota_con_cita(cli, prefijo):
+    vet = _crear(cli, f"{prefijo}-vet@test.com", "veterinario")
+    tutor = _crear(cli, f"{prefijo}-tutor@test.com")
+    especie = cli.get("/api/especies").json()[0]
+    mascota = cli.post(
+        "/api/mascotas",
+        {"cliente_id": tutor["id"], "especie_id": especie["id"], "nombre": "Canela",
+         "sexo": "Hembra", "color": "marrón"},
+    ).json()
+    servicio = cli.post(
+        "/api/servicios", {"nombre": "Control", "veterinarios_ids": [vet["id"]]}
+    ).json()
+    base = {"mascota_id": mascota["id"], "veterinario_id": vet["id"],
+            "servicio_id": servicio["id"], "motivo": "Control general"}
+    return vet, tutor, especie, mascota, base
+
+
+def test_avisos_por_correo_de_citas_e_historial():
+    buzon = _BuzonFalso()
+    cli = _con_buzon(buzon)
+    vet, tutor, especie, mascota, base = _mascota_con_cita(cli, "avisos")
+    manana = (datetime.now() + timedelta(days=1)).replace(hour=9, minute=0, second=0, microsecond=0)
+
+    # Agendar (Pendiente) no avisa; confirmar sí, y sólo una vez.
+    cita = cli.post("/api/citas", {**base, "fecha_hora": manana.isoformat()}).json()
+    assert buzon.avisos == []
+    cli.put(f"/api/citas/{cita['id']}/estado", {"estado": "Confirmada"})
+    cli.put(f"/api/citas/{cita['id']}/estado", {"estado": "Confirmada"})
+    assert [t for t, _ in buzon.avisos] == ["confirmada"], buzon.avisos
+    aviso = buzon.avisos[0][1]
+    assert aviso.email == tutor["email"] and aviso.mascota == "Canela"
+    assert aviso.veterinario == vet["nombre_completo"] and aviso.servicio == "Control"
+
+    # Cancelar por el PUT general también avisa.
+    cli.put(f"/api/citas/{cita['id']}", {"estado": "Cancelada"})
+    assert [t for t, _ in buzon.avisos] == ["confirmada", "cancelada"]
+
+    # Una cita que nace confirmada avisa al crearla.
+    cli.post(
+        "/api/citas",
+        {**base, "fecha_hora": (manana + timedelta(hours=2)).isoformat(), "estado": "Confirmada"},
+    )
+    assert [t for t, _ in buzon.avisos][-1] == "confirmada"
+
+    # La historia clínica llega al tutor.
+    cli.post(
+        "/api/historiales-medicos",
+        {"mascota_id": mascota["id"], "veterinario_id": vet["id"], "diagnostico": "Sana",
+         "tratamiento": "Ninguno", "observaciones": "Volver en 6 meses"},
+    )
+    tipo, ficha = buzon.avisos[-1]
+    assert tipo == "historial" and ficha.email == tutor["email"]
+    assert ficha.diagnostico == "Sana" and ficha.observaciones == "Volver en 6 meses"
+
+    # Sin tutor no hay a quién avisar.
+    previos = len(buzon.avisos)
+    refugio = cli.post(
+        "/api/mascotas",
+        {"especie_id": especie["id"], "nombre": "Trueno", "sexo": "Macho", "color": "negro"},
+    ).json()
+    cli.post(
+        "/api/historiales-medicos",
+        {"mascota_id": refugio["id"], "veterinario_id": vet["id"],
+         "diagnostico": "Sano", "tratamiento": "Vacunas"},
+    )
+    assert len(buzon.avisos) == previos
+
+    # Una petición que falla no envía nada: el aviso sale tras el commit.
+    otra = cli.post(
+        "/api/citas", {**base, "fecha_hora": (manana + timedelta(hours=4)).isoformat()}
+    ).json()
+    pasado = (datetime.now() - timedelta(days=1)).isoformat()
+    r = cli.put(f"/api/citas/{otra['id']}", {"estado": "Confirmada", "fecha_hora": pasado})
+    assert r.status == 409 and len(buzon.avisos) == previos, r
+
+
+def test_fallo_del_correo_no_rompe_la_operacion():
+    cli = _con_buzon(_BuzonFalso(falla=True))
+    _vet, _tutor, _especie, _mascota, base = _mascota_con_cita(cli, "falla")
+    manana = (datetime.now() + timedelta(days=1)).replace(hour=11, minute=0, second=0, microsecond=0)
+    cita = cli.post("/api/citas", {**base, "fecha_hora": manana.isoformat()}).json()
+    r = cli.put(f"/api/citas/{cita['id']}/estado", {"estado": "Confirmada"})
+    assert r.status == 200 and r.json()["estado"] == "Confirmada", r
+    assert cli.get(f"/api/citas/{cita['id']}").json()["estado"] == "Confirmada"
 
 
 def _ejecutar_todo() -> int:

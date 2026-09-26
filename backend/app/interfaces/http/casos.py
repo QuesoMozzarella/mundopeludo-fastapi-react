@@ -49,6 +49,7 @@ from ...application.use_cases.citas import (
     ActualizarCita,
     ActualizarServicio,
     AgendarCita,
+    AvisosDeCita,
     CambiarEstadoCita,
     ConsultarAgendaDia,
     ConsultarCitas,
@@ -91,7 +92,7 @@ from ...application.use_cases.sistema import (
     ObtenerEstadisticas,
     RegistrarActividad,
 )
-from .deps import ReposDep, ServiciosDep
+from .deps import AvisosDep, ReposDep, ServiciosDep
 
 # ------------------------------ autenticacion ---------------------------
 
@@ -377,8 +378,21 @@ def reglas_de_agenda(repos: ReposDep, servicios: ServiciosDep) -> ReglasDeAgenda
     )
 
 
-def actualizar_cita(repos: ReposDep, servicios: ServiciosDep) -> ActualizarCita:
-    return ActualizarCita(repos.citas, repos.estados_cita, reglas_de_agenda(repos, servicios))
+def avisos_de_cita(repos: ReposDep, avisos: AvisosDep) -> AvisosDeCita:
+    return AvisosDeCita(
+        repos.mascotas, repos.usuarios, repos.servicios, repos.estados_cita, avisos
+    )
+
+
+def actualizar_cita(
+    repos: ReposDep, servicios: ServiciosDep, avisos: AvisosDep
+) -> ActualizarCita:
+    return ActualizarCita(
+        repos.citas,
+        repos.estados_cita,
+        reglas_de_agenda(repos, servicios),
+        avisos_de_cita(repos, avisos),
+    )
 
 
 ActualizarCitaDep = Annotated[ActualizarCita, Depends(actualizar_cita)]
@@ -391,20 +405,21 @@ def actualizar_servicio(repos: ReposDep) -> ActualizarServicio:
 ActualizarServicioDep = Annotated[ActualizarServicio, Depends(actualizar_servicio)]
 
 
-def agendar_cita(repos: ReposDep, servicios: ServiciosDep) -> AgendarCita:
+def agendar_cita(repos: ReposDep, servicios: ServiciosDep, avisos: AvisosDep) -> AgendarCita:
     return AgendarCita(
         repos.citas,
         repos.mascotas,
         repos.estados_cita,
         reglas_de_agenda(repos, servicios),
+        avisos_de_cita(repos, avisos),
     )
 
 
 AgendarCitaDep = Annotated[AgendarCita, Depends(agendar_cita)]
 
 
-def cambiar_estado_cita(repos: ReposDep) -> CambiarEstadoCita:
-    return CambiarEstadoCita(repos.citas, repos.estados_cita)
+def cambiar_estado_cita(repos: ReposDep, avisos: AvisosDep) -> CambiarEstadoCita:
+    return CambiarEstadoCita(repos.citas, repos.estados_cita, avisos_de_cita(repos, avisos))
 
 
 CambiarEstadoCitaDep = Annotated[CambiarEstadoCita, Depends(cambiar_estado_cita)]
@@ -525,7 +540,9 @@ def eliminar_historial(repos: ReposDep) -> EliminarHistorial:
 EliminarHistorialDep = Annotated[EliminarHistorial, Depends(eliminar_historial)]
 
 
-def registrar_historial(repos: ReposDep, servicios: ServiciosDep) -> RegistrarHistorial:
+def registrar_historial(
+    repos: ReposDep, servicios: ServiciosDep, avisos: AvisosDep
+) -> RegistrarHistorial:
     return RegistrarHistorial(
         repos.historiales,
         repos.citas,
@@ -533,6 +550,7 @@ def registrar_historial(repos: ReposDep, servicios: ServiciosDep) -> RegistrarHi
         repos.usuarios,
         repos.estados_cita,
         servicios.reloj,
+        avisos,
     )
 
 

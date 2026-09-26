@@ -18,7 +18,7 @@ from ...domain.ports.repositories import (
     MascotaRepository,
     UsuarioRepository,
 )
-from ...domain.ports.services import Clock
+from ...domain.ports.services import AvisoHistorial, Clock, Notificaciones
 from ..cambios import SIN_CAMBIO, Cambio, nuevo
 from ..read_models import HistorialVista
 
@@ -99,6 +99,7 @@ class RegistrarHistorial:
         usuarios: UsuarioRepository,
         estados: EstadoCitaRepository,
         reloj: Clock,
+        notificaciones: Notificaciones,
     ):
         self.historiales = historiales
         self.citas = citas
@@ -106,6 +107,7 @@ class RegistrarHistorial:
         self.usuarios = usuarios
         self.estados = estados
         self.reloj = reloj
+        self.notificaciones = notificaciones
 
     def ejecutar(self, cmd: RegistrarHistorialCmd) -> HistorialMedico:
         cita = self._cita(cmd.cita_id)
@@ -125,6 +127,7 @@ class RegistrarHistorial:
         )
         if cita:
             self._marcar_atendida(cita)
+        self._avisar_al_tutor(historial)
         return historial
 
     def _cita(self, cita_id: int | None) -> Cita | None:
@@ -167,6 +170,30 @@ class RegistrarHistorial:
                 "Sólo un veterinario puede firmar un historial", "veterinario_id"
             )
         return veterinario_id
+
+    def _avisar_al_tutor(self, historial: HistorialMedico) -> None:
+        """El tutor recibe por correo el resumen de la ficha (si la mascota tiene uno)."""
+        mascota = self.mascotas.obtener(historial.mascota_id)
+        tutor = (
+            self.usuarios.obtener(mascota.cliente_id)
+            if mascota and mascota.cliente_id
+            else None
+        )
+        if tutor is None or not tutor.is_active:
+            return
+        veterinario = self.usuarios.obtener(historial.veterinario_id)
+        self.notificaciones.historial_registrado(
+            AvisoHistorial(
+                email=tutor.email,
+                nombre=tutor.nombre_completo,
+                mascota=mascota.nombre,
+                fecha=historial.fecha_creacion,
+                veterinario=veterinario.nombre_completo if veterinario else "",
+                diagnostico=historial.diagnostico,
+                tratamiento=historial.tratamiento,
+                observaciones=historial.observaciones,
+            )
+        )
 
     def _marcar_atendida(self, cita: Cita) -> None:
         """Como hacía la API anterior: registrar la ficha cierra la cita."""

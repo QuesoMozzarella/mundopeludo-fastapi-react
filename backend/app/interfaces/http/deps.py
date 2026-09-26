@@ -7,6 +7,7 @@ repositorios, nada más.
 from __future__ import annotations
 
 import sqlite3
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Annotated, Iterator
 
@@ -46,8 +47,11 @@ from ...domain.ports.services import (
 from ...domain.value_objects import TipoUsuario
 from ...infrastructure.db.connection import Database
 from ...infrastructure.notificaciones.adaptadores import (
+    Aviso,
     CorreoSmtp,
+    NotificacionesDiferidas,
     NotificacionesEnRegistro,
+    despachar,
 )
 from ...infrastructure.repositories.citas import (
     SqliteCitaRepository,
@@ -137,6 +141,11 @@ class Contenedor:
             generador=GeneradorCodigosSeguro(),
             notificaciones=self._notificaciones(),
         )
+        # Los avisos por correo salen en segundo plano tras el commit: la
+        # respuesta no espera al SMTP. Las pruebas activan `avisos_sincronos`
+        # para poder comprobar qué se envió.
+        self.avisos_sincronos = False
+        self._hilos_avisos = ThreadPoolExecutor(max_workers=2, thread_name_prefix="avisos")
 
     def _notificaciones(self) -> Notificaciones:
         c = self.config
@@ -153,6 +162,14 @@ class Contenedor:
 
     def preparar(self) -> None:
         self.db.crear_esquema()
+
+    def enviar_avisos(self, pendientes: list[Aviso]) -> None:
+        if not pendientes:
+            return
+        if self.avisos_sincronos:
+            despachar(pendientes)
+        else:
+            self._hilos_avisos.submit(despachar, list(pendientes))
 
     def repositorios(self, conexion: sqlite3.Connection) -> Repositorios:
         return Repositorios(
@@ -197,17 +214,37 @@ def obtener_servicios(request: Request) -> Servicios:
 METODOS_DE_LECTURA = {"GET", "HEAD", "OPTIONS"}
 
 
-def obtener_repos(request: Request) -> Iterator[Repositorios]:
+def obtener_bandeja_de_avisos() -> list[Aviso]:
+    """Avisos de la petición en curso. FastAPI la cachea por petición: el mismo
+    objeto llega a la unidad de trabajo y a los casos de uso."""
+    return []
+
+
+BandejaDep = Annotated[list, Depends(obtener_bandeja_de_avisos)]
+
+
+def obtener_repos(request: Request, bandeja: BandejaDep) -> Iterator[Repositorios]:
     """Una conexión por petición: commit al terminar bien, rollback si falla."""
     contenedor = obtener_contenedor(request)
     escritura = request.method not in METODOS_DE_LECTURA
     with contenedor.db.unidad_de_trabajo(escritura) as conexion:
         yield contenedor.repositorios(conexion)
+    # Aquí la transacción ya está confirmada (si falló, la excepción no llega
+    # a esta línea): sólo ahora salen los correos.
+    contenedor.enviar_avisos(bandeja)
 
 
 ReposDep = Annotated[Repositorios, Depends(obtener_repos)]
 ServiciosDep = Annotated[Servicios, Depends(obtener_servicios)]
 ConfigDep = Annotated[Config, Depends(obtener_config)]
+
+
+def obtener_avisos(servicios: ServiciosDep, bandeja: BandejaDep) -> Notificaciones:
+    """Notificaciones para los casos de uso: se envían tras el commit."""
+    return NotificacionesDiferidas(servicios.notificaciones, bandeja)
+
+
+AvisosDep = Annotated[Notificaciones, Depends(obtener_avisos)]
 
 
 def usuario_opcional(
