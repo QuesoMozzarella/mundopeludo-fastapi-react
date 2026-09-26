@@ -15,7 +15,7 @@ import {
 interface TiendaViewProps {
   productos: Producto[];
   onAddToCart: (producto: Producto) => void;
-  currentUser: User;
+  currentUser: User | null;
   onOpenCart: () => void;
 }
 

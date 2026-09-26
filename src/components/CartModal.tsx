@@ -21,7 +21,9 @@ interface CartModalProps {
   onUpdateQuantity: (productoId: number, delta: number) => void;
   onRemoveItem: (productoId: number) => void;
   onClearCart: () => void;
-  currentUser: User;
+  /** null = visitante: puede llenar el carrito, pagar pide iniciar sesión. */
+  currentUser: User | null;
+  onRequiereLogin: () => void;
   onCheckout: (data: {
     items: { producto_id: number; cantidad: number }[];
     direccion_envio: string;
@@ -37,10 +39,11 @@ export const CartModal: React.FC<CartModalProps> = ({
   onRemoveItem,
   onClearCart,
   currentUser,
+  onRequiereLogin,
   onCheckout
 }) => {
   const [metodoPago, setMetodoPago] = useState<string>('tarjeta');
-  const [direccion, setDireccion] = useState<string>(currentUser.direccion || 'Av. Providencia 1234, Santiago');
+  const [direccion, setDireccion] = useState<string>(currentUser?.direccion || '');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [orderCompleted, setOrderCompleted] = useState<any | null>(null);
 
@@ -54,6 +57,10 @@ export const CartModal: React.FC<CartModalProps> = ({
   const handlePay = async (e: React.FormEvent) => {
     e.preventDefault();
     if (cartItems.length === 0) return;
+    if (!currentUser) {
+      onRequiereLogin();
+      return;
+    }
 
     try {
       setIsSubmitting(true);
@@ -111,7 +118,7 @@ export const CartModal: React.FC<CartModalProps> = ({
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-500">Cliente:</span>
-                <span className="font-semibold">{currentUser.nombre} {currentUser.apellidos}</span>
+                <span className="font-semibold">{currentUser?.nombre} {currentUser?.apellidos}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-500">Total Pagado:</span>
@@ -207,7 +214,8 @@ export const CartModal: React.FC<CartModalProps> = ({
                       onChange={(e) => setDireccion(e.target.value)}
                       placeholder="Calle, número, depto / Retiro en clínica"
                       className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs focus:outline-none focus:ring-2 focus:ring-amber-500"
-                      required
+                      // Un visitante no llega a pagar: el botón le lleva al login.
+                      required={currentUser !== null}
                     />
                   </div>
 
@@ -269,7 +277,11 @@ export const CartModal: React.FC<CartModalProps> = ({
                     className="w-full py-3 rounded-xl bg-[#ff9f43] hover:bg-[#f08e30] text-white font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50 active:scale-98"
                   >
                     <ShieldCheck className="w-4 h-4" />
-                    <span>{isSubmitting ? 'Procesando Pago...' : `Pagar $${total.toLocaleString('es-CL')}`}</span>
+                    <span>{isSubmitting
+                        ? 'Procesando Pago...'
+                        : currentUser
+                          ? `Pagar $${total.toLocaleString('es-CL')}`
+                          : 'Inicia sesión para pagar'}</span>
                   </button>
                 </form>
               </>

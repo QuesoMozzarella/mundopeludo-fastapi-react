@@ -32,7 +32,6 @@ import { DashboardView } from './components/DashboardView';
 import { CartModal } from './components/CartModal';
 import { LoginView } from './components/LoginView';
 import { Footer } from './components/Footer';
-import { InicioPublico } from './components/InicioPublico';
 import { AlertCircle, RefreshCw } from 'lucide-react';
 
 const CLAVE_CARRITO = 'mundopeludo_cart';
@@ -42,10 +41,11 @@ interface Destino {
   context?: any;
 }
 
-/**
- * Puerta de entrada: sin sesión sólo se ve la página de inicio pública; el
- * resto de secciones pide iniciar sesión y, al entrar, abre la que se pidió.
- */
+// Lo mismo que era público en el Django (index, adopciones, tienda): se ve sin
+// sesión. El resto pide iniciar sesión y, al entrar, abre la sección pedida.
+const SECCIONES_PUBLICAS = new Set(['inicio', 'adopciones', 'tienda']);
+
+/** Puerta de entrada: decide entre la app (con o sin sesión) y el login. */
 export function App() {
   const [sesion, setSesion] = useState<Sesion | null>(() => obtenerSesion());
   const [aviso, setAviso] = useState<string | null>(null);
@@ -89,19 +89,7 @@ export function App() {
     // Sólo al arrancar: después la sesión cambia por login/logout explícitos.
   }, []);
 
-  if (!sesion && !pidiendoLogin) {
-    return (
-      <InicioPublico
-        onRequiereLogin={(tab, context) => {
-          setDestino({ tab, context });
-          setAviso(null);
-          setPidiendoLogin(true);
-        }}
-      />
-    );
-  }
-
-  if (!sesion) {
+  if (!sesion && pidiendoLogin) {
     return (
       <LoginView
         aviso={aviso}
@@ -121,23 +109,31 @@ export function App() {
 
   return (
     <Clinica
-      key={sesion.usuario.id}
-      currentUser={sesion.usuario}
+      // Montaje nuevo al entrar o salir: estado y datos del usuario anterior no se arrastran.
+      key={sesion?.usuario.id ?? 'publico'}
+      currentUser={sesion?.usuario ?? null}
       destinoInicial={destino}
+      onRequiereLogin={(tab, context) => {
+        setDestino({ tab, context });
+        setAviso(null);
+        setPidiendoLogin(true);
+      }}
       onCerrarSesion={() => cerrarSesion()}
     />
   );
 }
 
 interface ClinicaProps {
-  currentUser: User;
+  /** null = visitante: sólo secciones públicas y datos públicos de la API. */
+  currentUser: User | null;
   /** Sección que el usuario pidió antes de iniciar sesión. */
   destinoInicial: Destino;
+  onRequiereLogin: (tab: string, context?: any) => void;
   onCerrarSesion: () => void;
 }
 
-function Clinica({ currentUser, destinoInicial, onCerrarSesion }: ClinicaProps) {
-  const esPersonal = currentUser.tipo === 'veterinario' || currentUser.tipo === 'administrador';
+function Clinica({ currentUser, destinoInicial, onRequiereLogin, onCerrarSesion }: ClinicaProps) {
+  const esPersonal = currentUser?.tipo === 'veterinario' || currentUser?.tipo === 'administrador';
   const [activeTab, setActiveTab] = useState<string>(destinoInicial.tab);
   const [loading, setLoading] = useState<boolean>(true);
   const [errorBanner, setErrorBanner] = useState<string | null>(null);
@@ -191,7 +187,7 @@ function Clinica({ currentUser, destinoInicial, onCerrarSesion }: ClinicaProps) 
   };
 
   // La API ya filtra por usuario: un cliente recibe sólo sus mascotas, citas,
-  // historiales y solicitudes; el personal, todo.
+  // historiales y solicitudes; el personal, todo. Un visitante, sólo lo público.
   const loadData = async (showLoadingSpinner = false) => {
     if (showLoadingSpinner) setLoading(true);
     setErrorBanner(null);
@@ -206,6 +202,8 @@ function Clinica({ currentUser, destinoInicial, onCerrarSesion }: ClinicaProps) 
         console.warn('Carga parcial:', err?.message || err);
         return null;
       });
+      const privado = <T,>(cargar: () => Promise<T>) =>
+        currentUser ? intentar(cargar()) : Promise.resolve(null);
       const [
         vetsData,
         especiesData,
@@ -220,12 +218,12 @@ function Clinica({ currentUser, destinoInicial, onCerrarSesion }: ClinicaProps) 
         intentar(apiService.getVeterinarios()),
         intentar(apiService.getEspecies()),
         intentar(apiService.getServicios()),
-        intentar(apiService.getMascotas()),
-        intentar(apiService.getCitas()),
+        privado(() => apiService.getMascotas()),
+        privado(() => apiService.getCitas()),
         intentar(apiService.getAdopciones()),
-        intentar(apiService.getSolicitudesAdopcion()),
+        privado(() => apiService.getSolicitudesAdopcion()),
         intentar(apiService.getProductos()),
-        intentar(apiService.getHistoriales())
+        privado(() => apiService.getHistoriales())
       ]);
 
       if (vetsData) setVeterinarios(vetsData);
@@ -289,6 +287,7 @@ function Clinica({ currentUser, destinoInicial, onCerrarSesion }: ClinicaProps) 
     direccion_envio: string;
     metodo_pago: string;
   }) => {
+    if (!currentUser) throw new Error('Inicia sesión para completar la compra');
     const res = await apiService.createPedido({
       cliente_id: currentUser.id,
       items: data.items,
@@ -390,6 +389,10 @@ function Clinica({ currentUser, destinoInicial, onCerrarSesion }: ClinicaProps) 
 
   // Quick navigation helper
   const handleNavigate = (tab: string, context?: any) => {
+    if (!currentUser && !SECCIONES_PUBLICAS.has(tab)) {
+      onRequiereLogin(tab, context);
+      return;
+    }
     if (context?.servicioId) {
       setPreselectedServicioId(context.servicioId);
     }
@@ -402,12 +405,10 @@ function Clinica({ currentUser, destinoInicial, onCerrarSesion }: ClinicaProps) 
       {/* Navbar */}
       <Navbar
         activeTab={activeTab}
-        setActiveTab={(t) => {
-          setActiveTab(t);
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-        }}
+        setActiveTab={(t) => handleNavigate(t)}
         currentUser={currentUser}
         onCerrarSesion={onCerrarSesion}
+        onIniciarSesion={() => onRequiereLogin(activeTab)}
         cartCount={cartItems.reduce((acc, i) => acc + i.cantidad, 0)}
         onOpenCart={() => setCartModalOpen(true)}
       />
@@ -449,7 +450,7 @@ function Clinica({ currentUser, destinoInicial, onCerrarSesion }: ClinicaProps) 
               />
             )}
 
-            {activeTab === 'citas' && (
+            {activeTab === 'citas' && currentUser && (
               <CitasView
                 citas={citas}
                 mascotas={mascotas}
@@ -467,7 +468,7 @@ function Clinica({ currentUser, destinoInicial, onCerrarSesion }: ClinicaProps) 
               />
             )}
 
-            {activeTab === 'mascotas' && (
+            {activeTab === 'mascotas' && currentUser && (
               <MascotasView
                 mascotas={mascotas}
                 especies={especies}
@@ -485,6 +486,7 @@ function Clinica({ currentUser, destinoInicial, onCerrarSesion }: ClinicaProps) 
                 adopciones={adopciones}
                 solicitudes={solicitudes}
                 currentUser={currentUser}
+                onRequiereLogin={() => onRequiereLogin('adopciones')}
                 onApplyAdopcion={handleApplyAdopcion}
                 onAprobarSolicitud={handleAprobarSolicitud}
                 onRechazarSolicitud={handleRechazarSolicitud}
@@ -500,7 +502,7 @@ function Clinica({ currentUser, destinoInicial, onCerrarSesion }: ClinicaProps) 
               />
             )}
 
-            {activeTab === 'historial' && (
+            {activeTab === 'historial' && currentUser && (
               <HistorialView
                 historiales={historiales}
                 mascotas={mascotas}
@@ -511,7 +513,7 @@ function Clinica({ currentUser, destinoInicial, onCerrarSesion }: ClinicaProps) 
               />
             )}
 
-            {activeTab === 'inventario' && (
+            {activeTab === 'inventario' && currentUser && (
               <InventarioView
                 productos={productos}
                 currentUser={currentUser}
@@ -521,7 +523,7 @@ function Clinica({ currentUser, destinoInicial, onCerrarSesion }: ClinicaProps) 
               />
             )}
 
-            {activeTab === 'dashboard' && (
+            {activeTab === 'dashboard' && currentUser && (
               <DashboardView
                 stats={stats}
                 currentUser={currentUser}
@@ -545,6 +547,10 @@ function Clinica({ currentUser, destinoInicial, onCerrarSesion }: ClinicaProps) 
         onRemoveItem={handleRemoveCartItem}
         onClearCart={handleClearCart}
         currentUser={currentUser}
+        onRequiereLogin={() => {
+          setCartModalOpen(false);
+          onRequiereLogin('tienda');
+        }}
         onCheckout={handleCheckout}
       />
     </div>

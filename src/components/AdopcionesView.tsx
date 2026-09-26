@@ -16,7 +16,9 @@ import {
 interface AdopcionesViewProps {
   adopciones: Mascota[];
   solicitudes: SolicitudAdopcion[];
-  currentUser: User;
+  /** null = visitante: ve el catálogo, pero postular pide iniciar sesión. */
+  currentUser: User | null;
+  onRequiereLogin: () => void;
   onApplyAdopcion: (mascotaId: number, clienteId: number, notas: string) => Promise<void>;
   onAprobarSolicitud: (solicitudId: number, revisorId: number, notas?: string) => Promise<void>;
   onRechazarSolicitud: (solicitudId: number, revisorId: number, notas?: string) => Promise<void>;
@@ -26,6 +28,7 @@ export const AdopcionesView: React.FC<AdopcionesViewProps> = ({
   adopciones,
   solicitudes,
   currentUser,
+  onRequiereLogin,
   onApplyAdopcion,
   onAprobarSolicitud,
   onRechazarSolicitud
@@ -38,7 +41,7 @@ export const AdopcionesView: React.FC<AdopcionesViewProps> = ({
 
   const handleApplySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedPetForAdoption) return;
+    if (!selectedPetForAdoption || !currentUser) return;
 
     if (!notasCliente.trim()) {
       alert('Por favor cuéntanos por qué deseas adoptar y las condiciones del hogar.');
@@ -94,13 +97,15 @@ export const AdopcionesView: React.FC<AdopcionesViewProps> = ({
           >
             Mascotas Disponibles ({adopciones.length})
           </button>
-          <button
-            id="subtab-solicitudes-adopciones"
-            onClick={() => setActiveSubTab('solicitudes')}
-            className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${activeSubTab === 'solicitudes' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600 hover:text-slate-900'}`}
-          >
-            Gestión de Solicitudes ({solicitudes.length})
-          </button>
+          {currentUser && (
+            <button
+              id="subtab-solicitudes-adopciones"
+              onClick={() => setActiveSubTab('solicitudes')}
+              className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${activeSubTab === 'solicitudes' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600 hover:text-slate-900'}`}
+            >
+              Gestión de Solicitudes ({solicitudes.length})
+            </button>
+          )}
         </div>
       </div>
 
@@ -171,7 +176,7 @@ export const AdopcionesView: React.FC<AdopcionesViewProps> = ({
                   <div className="p-6 pt-0">
                     <button
                       id={`btn-solicitar-adopcion-${pet.id}`}
-                      onClick={() => setSelectedPetForAdoption(pet)}
+                      onClick={() => (currentUser ? setSelectedPetForAdoption(pet) : onRequiereLogin())}
                       className="w-full py-3 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-md shadow-rose-600/20 transition-all flex items-center justify-center gap-2"
                     >
                       <Heart className="w-4 h-4" />
@@ -241,7 +246,7 @@ export const AdopcionesView: React.FC<AdopcionesViewProps> = ({
                 </div>
 
                 {/* Approver actions for Vet / Admin */}
-                {(currentUser.tipo === 'veterinario' || currentUser.tipo === 'administrador') && sol.estado === 'pendiente' && (
+                {currentUser && (currentUser.tipo === 'veterinario' || currentUser.tipo === 'administrador') && sol.estado === 'pendiente' && (
                   <div className="flex flex-col sm:flex-row items-end gap-2 shrink-0">
                     <input
                       type="text"
@@ -312,9 +317,9 @@ export const AdopcionesView: React.FC<AdopcionesViewProps> = ({
                   Tus Datos de Contacto
                 </label>
                 <div className="bg-slate-50 p-3 rounded-xl text-xs text-slate-700">
-                  <p><strong>Postulante:</strong> {currentUser.nombre} {currentUser.apellidos}</p>
-                  <p><strong>Email:</strong> {currentUser.email}</p>
-                  <p><strong>Teléfono:</strong> {currentUser.telefono || 'Sin registrar'}</p>
+                  <p><strong>Postulante:</strong> {currentUser?.nombre} {currentUser?.apellidos}</p>
+                  <p><strong>Email:</strong> {currentUser?.email}</p>
+                  <p><strong>Teléfono:</strong> {currentUser?.telefono || 'Sin registrar'}</p>
                 </div>
               </div>
 
