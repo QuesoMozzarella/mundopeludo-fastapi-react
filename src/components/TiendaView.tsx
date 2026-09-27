@@ -107,7 +107,9 @@ export const TiendaView: React.FC<TiendaViewProps> = ({ productos, onAddToCart, 
         )}
       </div>
 
-      {filtrados.length === 0 ? (
+      {productos.length === 0 ? (
+        <Vacio icono={ShoppingBag} titulo="La tienda todavía no tiene productos" texto="Pronto podrás comprar aquí alimentos, antiparasitarios y medicamentos." />
+      ) : filtrados.length === 0 ? (
         <Vacio icono={ShoppingBag} titulo="Ningún producto coincide" texto="Prueba con otra búsqueda o quita los filtros.">
           <button onClick={limpiarFiltros} className="mp-btn mp-btn--claro">Quitar filtros</button>
         </Vacio>

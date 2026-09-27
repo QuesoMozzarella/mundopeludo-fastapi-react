@@ -156,9 +156,15 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
 
             {!currentUser && (
-              <button id="btn-iniciar-sesion" onClick={onIniciarSesion} className="mp-btn mp-btn--fantasma mp-btn--sm">
+              <button
+                id="btn-iniciar-sesion"
+                onClick={onIniciarSesion}
+                aria-label="Iniciar sesión"
+                className="mp-btn mp-btn--fantasma mp-btn--sm"
+              >
                 <LogIn className="w-4 h-4" />
-                Iniciar sesión
+                {/* En móvil sólo el icono: con el carrito y el menú no cabe el texto. */}
+                <span className="hidden sm:inline">Iniciar sesión</span>
               </button>
             )}
 

@@ -1735,6 +1735,17 @@ def test_sirve_el_frontend_compilado():
         assert b"no debe salir" not in cli.get(ruta).cuerpo, ruta
 
 
+def test_cabeceras_de_seguridad():
+    cli = nuevo_cliente()
+    r = cli.get("/api/health")
+    assert r.headers.get("x-content-type-options") == "nosniff", r.headers
+    assert r.headers.get("x-frame-options") == "DENY"
+    assert "strict-transport-security" not in r.headers  # sólo en producción
+    prod = crear_cliente(create_app(Config(
+        ruta_bd=":memory:", url_bd="", entorno="produccion", secreto_jwt="clave-propia", correo_host="")))
+    assert prod.get("/api/health").headers.get("strict-transport-security", "").startswith("max-age=")
+
+
 def _ejecutar_todo() -> int:
     pruebas = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     fallos = 0

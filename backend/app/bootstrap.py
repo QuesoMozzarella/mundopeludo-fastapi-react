@@ -74,6 +74,7 @@ def create_app(configuracion: Config | None = None) -> FastAPI:
     )
 
     registrar_manejadores(app)
+    _cabeceras_de_seguridad(app, hsts=contenedor.config.es_produccion)
 
     for router in (
         sistema.router,
@@ -93,6 +94,32 @@ def create_app(configuracion: Config | None = None) -> FastAPI:
         _servir_frontend(app, frontend)
 
     return app
+
+
+def _cabeceras_de_seguridad(app: FastAPI, hsts: bool) -> None:
+    """Cabeceras básicas en todas las respuestas (web y API).
+
+    * nosniff: el navegador no "adivina" tipos (una imagen subida no se ejecuta).
+    * frame-ancestors / X-Frame-Options: nadie incrusta la app en un iframe
+      para engañar clics.
+    * Referrer-Policy: las URLs internas no se filtran a otros sitios.
+    * HSTS sólo en producción: en local se usa http.
+    """
+    fijas = {
+        "X-Content-Type-Options": "nosniff",
+        "X-Frame-Options": "DENY",
+        "Content-Security-Policy": "frame-ancestors 'none'",
+        "Referrer-Policy": "strict-origin-when-cross-origin",
+    }
+    if hsts:
+        fijas["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+
+    @app.middleware("http")
+    async def seguridad(request, call_next):
+        respuesta = await call_next(request)
+        for nombre, valor in fijas.items():
+            respuesta.headers.setdefault(nombre, valor)
+        return respuesta
 
 
 def _servir_frontend(app: FastAPI, carpeta: Path) -> None:
