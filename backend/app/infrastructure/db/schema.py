@@ -303,6 +303,13 @@ CREATE INDEX IF NOT EXISTS idx_codigos_usuario ON codigos_recuperacion(usuario_i
 
 
 def _columnas(conn, tabla: str) -> set[str]:
+    if getattr(conn, "dialecto", "sqlite") == "postgres":
+        filas = conn.execute(
+            "SELECT column_name FROM information_schema.columns"
+            " WHERE table_schema = current_schema() AND table_name = ?",
+            (tabla,),
+        ).fetchall()
+        return {fila[0] for fila in filas}
     return {fila[1] for fila in conn.execute(f"PRAGMA table_info({tabla})")}
 
 

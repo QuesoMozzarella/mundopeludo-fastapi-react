@@ -316,7 +316,7 @@ def poblar() -> None:
             crear_producto.ejecutar(CrearProductoCmd(**datos))
 
     print("Listo.")
-    print(f"  Base de datos : {contenedor.config.ruta_bd}")
+    print(f"  Base de datos : {contenedor.config.descripcion_bd}")
     print(f"  Administrador : {admin.email} / {PASSWORD_DEMO}")
     print(f"  Veterinario   : vet.garcia@mundopeludo.com / {PASSWORD_DEMO}")
     print(f"  Cliente       : maria.gonzalez@example.com / {PASSWORD_DEMO}")

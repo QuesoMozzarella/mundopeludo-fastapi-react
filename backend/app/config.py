@@ -19,6 +19,10 @@ def _bool(nombre: str, por_defecto: bool) -> bool:
 @dataclass
 class Config:
     ruta_bd: str = field(default_factory=lambda: os.getenv("MP_DB_PATH", str(RAIZ / "data" / "mundopeludo.db")))
+    # PostgreSQL (Heroku define DATABASE_URL al añadir Heroku Postgres). Si
+    # está definida se usa en lugar del archivo SQLite de `ruta_bd`.
+    url_bd: str = field(default_factory=lambda: os.getenv("DATABASE_URL", ""))
+    conexiones_bd: int = field(default_factory=lambda: int(os.getenv("MP_DB_POOL", "5")))
     secreto_jwt: str = field(default_factory=lambda: os.getenv("MP_SECRET_KEY", SECRETO_DESARROLLO))
     minutos_token: int = field(default_factory=lambda: int(os.getenv("MP_TOKEN_MINUTES", "720")))
     origenes_cors: list[str] = field(default_factory=lambda: [o for o in os.getenv("MP_CORS_ORIGINS", "*").split(",") if o])
@@ -43,6 +47,15 @@ class Config:
     @property
     def correo_configurado(self) -> bool:
         return bool(self.correo_host)
+
+    @property
+    def descripcion_bd(self) -> str:
+        """Qué base se usa, sin la contraseña de la URL (para mostrarlo en consola)."""
+        if self.url_bd:
+            import re
+
+            return "PostgreSQL " + re.sub(r"//([^:/@]+):[^@]*@", r"//\1:***@", self.url_bd)
+        return f"SQLite {self.ruta_bd}"
 
     @property
     def es_produccion(self) -> bool:

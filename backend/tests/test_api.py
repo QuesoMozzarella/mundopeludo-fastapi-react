@@ -21,11 +21,35 @@ from cliente import crear_cliente  # noqa: E402
 
 PASSWORD = "mundopeludo2025"
 
+# Con MP_TEST_DATABASE_URL (p. ej. postgresql://postgres@localhost/postgres)
+# cada prueba corre sobre una base PostgreSQL nueva en lugar de un SQLite.
+URL_PG_PRUEBAS = os.getenv("MP_TEST_DATABASE_URL", "")
+
+
+def _url_bd_nueva() -> str:
+    """Crea una base PostgreSQL vacía y devuelve su URL ("" si se usa SQLite)."""
+    if not URL_PG_PRUEBAS:
+        return ""
+    import uuid
+
+    import psycopg
+
+    nombre = f"mp_prueba_{uuid.uuid4().hex[:12]}"
+    with psycopg.connect(URL_PG_PRUEBAS, autocommit=True) as admin:
+        admin.execute(f'CREATE DATABASE "{nombre}"')
+    base, _, consulta = URL_PG_PRUEBAS.partition("?")
+    return base.rsplit("/", 1)[0] + "/" + nombre + (f"?{consulta}" if consulta else "")
+
+
+def _config(ruta: str, **extra) -> Config:
+    """Configuración de prueba: SQLite en `ruta` o una base PostgreSQL nueva."""
+    return Config(ruta_bd=ruta, url_bd=_url_bd_nueva(), **extra)
+
 
 def nuevo_cliente():
     ruta = os.path.join(tempfile.mkdtemp(prefix="mundopeludo-test-"), "prueba.db")
     app = create_app(
-        Config(ruta_bd=ruta, secreto_jwt="secreto-de-prueba", exigir_auth=False, correo_host="")
+        _config(ruta, secreto_jwt="secreto-de-prueba", exigir_auth=False, correo_host="")
     )
     return crear_cliente(app)
 
@@ -34,7 +58,7 @@ def cliente_con_auth():
     """App con `MP_REQUIRE_AUTH=1`; devuelve también la app para sembrar datos."""
     ruta = os.path.join(tempfile.mkdtemp(prefix="mundopeludo-auth-"), "prueba.db")
     app = create_app(
-        Config(ruta_bd=ruta, secreto_jwt="secreto", exigir_auth=True, correo_host="")
+        _config(ruta, secreto_jwt="secreto", exigir_auth=True, correo_host="")
     )
     return app, crear_cliente(app)
 
@@ -844,12 +868,12 @@ def test_contrato_del_cliente_spa():
 
 def test_produccion_exige_clave_propia():
     try:
-        create_app(Config(ruta_bd=":memory:", entorno="produccion", secreto_jwt=SECRETO_DESARROLLO))
+        create_app(Config(ruta_bd=":memory:", url_bd="", entorno="produccion", secreto_jwt=SECRETO_DESARROLLO))
     except RuntimeError:
         pass
     else:
         raise AssertionError("arrancó en producción con la clave JWT de desarrollo")
-    create_app(Config(ruta_bd=":memory:", entorno="produccion", secreto_jwt="clave-propia"))
+    create_app(Config(ruta_bd=":memory:", url_bd="", entorno="produccion", secreto_jwt="clave-propia"))
 
 
 def test_historial_sin_cita():
@@ -950,8 +974,8 @@ class _BuzonFalso:
 
 def test_recuperacion_envia_el_codigo_por_correo():
     ruta = os.path.join(tempfile.mkdtemp(prefix="mundopeludo-correo-"), "prueba.db")
-    configuracion = Config(
-        ruta_bd=ruta, secreto_jwt="s", exigir_auth=True, correo_host="smtp.ejemplo.com"
+    configuracion = _config(
+        ruta, secreto_jwt="s", exigir_auth=True, correo_host="smtp.ejemplo.com"
     )
     app = create_app(configuracion)
     buzon = _BuzonFalso()
@@ -1079,7 +1103,7 @@ def test_correo_redirigido_en_desarrollo():
     assert directo["To"] == "tutor@example.com" and not directo["Subject"].startswith("[Para")
 
     try:
-        create_app(Config(ruta_bd=":memory:", entorno="produccion", secreto_jwt="clave-propia",
+        create_app(Config(ruta_bd=":memory:", url_bd="", entorno="produccion", secreto_jwt="clave-propia",
                           correo_redirigir_a="yo@test.com"))
     except RuntimeError:
         pass
@@ -1100,8 +1124,10 @@ def test_crear_superusuario_por_consola():
     import subprocess
 
     ruta = os.path.join(tempfile.mkdtemp(prefix="mundopeludo-su-"), "prueba.db")
-    entorno = {**os.environ, "MP_DB_PATH": ruta, "MP_SUPERUSER_PASSWORD": PASSWORD,
-               "PYTHONIOENCODING": "utf-8"}
+    config = _config(ruta, secreto_jwt="s", exigir_auth=True, correo_host="")
+    # El script y la app de la prueba tienen que usar la misma base.
+    entorno = {**os.environ, "MP_DB_PATH": ruta, "DATABASE_URL": config.url_bd,
+               "MP_SUPERUSER_PASSWORD": PASSWORD, "PYTHONIOENCODING": "utf-8"}
     script = os.path.join(RAIZ, "crear_superusuario.py")
     argumentos = [sys.executable, script, "--no-interactivo", "--email", "raiz@test.com",
                   "--nombre", "Rita", "--apellidos", "Raíz"]
@@ -1110,7 +1136,7 @@ def test_crear_superusuario_por_consola():
     repetido = subprocess.run(argumentos, env=entorno, capture_output=True, text=True, encoding="utf-8")
     assert repetido.returncode == 1 and "Ya existe" in repetido.stderr, repetido.stderr
 
-    app = create_app(Config(ruta_bd=ruta, secreto_jwt="s", exigir_auth=True, correo_host=""))
+    app = create_app(config)
     cli = crear_cliente(app)
     sesion = _token(cli, "raiz@test.com")
     assert cli.get("/api/users", headers=sesion).status == 200
@@ -1298,7 +1324,7 @@ def test_restablecer_password_desbloquea_la_cuenta():
 def test_el_dominio_usa_el_reloj_inyectado():
     """Vencimientos y fechas salen del puerto Clock, no del reloj del sistema."""
     ruta = os.path.join(tempfile.mkdtemp(prefix="mundopeludo-reloj-"), "prueba.db")
-    app = create_app(Config(ruta_bd=ruta, secreto_jwt="s", exigir_auth=False, correo_host=""))
+    app = create_app(_config(ruta, secreto_jwt="s", exigir_auth=False, correo_host=""))
     reloj = _RelojFijo(datetime(2030, 6, 15, 9, 30))
     app.state.contenedor.servicios.reloj = reloj
     cli = crear_cliente(app)
@@ -1352,7 +1378,7 @@ def test_actualizacion_parcial_distingue_ausente_null_y_valor():
 def _con_buzon(buzon):
     """Cliente con los avisos síncronos y entregados a un buzón de prueba."""
     ruta = os.path.join(tempfile.mkdtemp(prefix="mundopeludo-avisos-"), "prueba.db")
-    app = create_app(Config(ruta_bd=ruta, secreto_jwt="s", exigir_auth=False, correo_host=""))
+    app = create_app(_config(ruta, secreto_jwt="s", exigir_auth=False, correo_host=""))
     app.state.contenedor.servicios.notificaciones = buzon
     app.state.contenedor.avisos_sincronos = True
     return crear_cliente(app)
@@ -1625,7 +1651,7 @@ def test_la_cita_cancelada_libera_su_hueco():
 
 def test_la_agenda_de_hoy_no_ofrece_horas_pasadas():
     ruta = os.path.join(tempfile.mkdtemp(prefix="mundopeludo-hoy-"), "prueba.db")
-    app = create_app(Config(ruta_bd=ruta, secreto_jwt="s", exigir_auth=False, correo_host=""))
+    app = create_app(_config(ruta, secreto_jwt="s", exigir_auth=False, correo_host=""))
     app.state.contenedor.servicios.reloj = _RelojFijo(datetime(2030, 6, 17, 10, 10))  # lunes
     cli = crear_cliente(app)
     vet = _crear(cli, "hoy-vet@test.com", "veterinario")
@@ -1661,12 +1687,21 @@ def test_migracion_anade_precio_y_duracion_a_servicios():
     import sqlite3
 
     ruta = os.path.join(tempfile.mkdtemp(prefix="mundopeludo-migra-"), "vieja.db")
-    config = Config(ruta_bd=ruta, secreto_jwt="secreto", exigir_auth=False, correo_host="")
-    crear_cliente(create_app(config)).post("/api/servicios", {"nombre": "Consulta antigua"})
+    config = _config(ruta, secreto_jwt="secreto", exigir_auth=False, correo_host="")
+    app_anterior = create_app(config)
+    crear_cliente(app_anterior).post("/api/servicios", {"nombre": "Consulta antigua"})
     # Una base de antes de este cambio: la tabla sin las dos columnas.
-    with sqlite3.connect(ruta) as conexion:
-        conexion.execute("ALTER TABLE servicios DROP COLUMN precio")
-        conexion.execute("ALTER TABLE servicios DROP COLUMN duracion_min")
+    if config.url_bd:
+        import psycopg
+
+        app_anterior.state.contenedor.db.cerrar()
+        with psycopg.connect(config.url_bd, autocommit=True) as conexion:
+            conexion.execute("ALTER TABLE servicios DROP COLUMN precio")
+            conexion.execute("ALTER TABLE servicios DROP COLUMN duracion_min")
+    else:
+        with sqlite3.connect(ruta) as conexion:
+            conexion.execute("ALTER TABLE servicios DROP COLUMN precio")
+            conexion.execute("ALTER TABLE servicios DROP COLUMN duracion_min")
 
     servicios = crear_cliente(create_app(config)).get("/api/servicios").json()
     assert [(s["nombre"], s["precio"], s["duracion_min"]) for s in servicios] == [

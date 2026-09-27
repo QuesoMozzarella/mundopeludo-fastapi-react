@@ -98,7 +98,7 @@ def main() -> int:
         return 1
 
     print(f"Administrador creado: {usuario.email} (id {usuario.id})")
-    print(f"Base de datos: {config.ruta_bd}")
+    print(f"Base de datos: {config.descripcion_bd}")
     return 0
 
 

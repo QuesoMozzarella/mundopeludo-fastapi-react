@@ -1,5 +1,5 @@
-# Ejecuta las pruebas de la API, el chequeo de tipos del frontend y las e2e
-# de Playwright en cada push y pull request.
+# Ejecuta las pruebas de la API (con SQLite y con PostgreSQL), el chequeo de
+# tipos del frontend y las e2e de Playwright en cada push y pull request.
 name: Pruebas
 
 on:
@@ -13,11 +13,39 @@ concurrency:
 
 jobs:
   api:
-    name: API (backend)
+    name: API (SQLite)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - run: pip install -r backend/requirements.txt
+      - run: python backend/tests/test_api.py
+
+  api-postgres:
+    name: API (PostgreSQL)
+    runs-on: ubuntu-latest
+    # La misma base que Heroku Postgres: cada prueba crea su propia base.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      MP_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
@@ -30,13 +58,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: backend/requirements.txt
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -50,7 +78,7 @@ jobs:
       - run: npm run test:e2e
       - name: Guardar trazas de los fallos
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: trazas-e2e
           path: test-results/

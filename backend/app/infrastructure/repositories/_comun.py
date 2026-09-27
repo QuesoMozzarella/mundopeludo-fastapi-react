@@ -30,6 +30,9 @@ class RepositorioSQLite:
         return self._ejecutar(sql, parametros).fetchall()
 
     def _insertar(self, sql: str, parametros: tuple) -> int:
+        if getattr(self.conexion, "dialecto", "sqlite") == "postgres":
+            # PostgreSQL no tiene lastrowid: el id vuelve con RETURNING.
+            return self._ejecutar(sql.rstrip() + " RETURNING id", parametros).fetchone()[0]
         return self._ejecutar(sql, parametros).lastrowid
 
     def _escalar(self, sql: str, parametros: tuple = ()) -> object:
