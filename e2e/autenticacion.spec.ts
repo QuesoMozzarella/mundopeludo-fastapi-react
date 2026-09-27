@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { abrirLogin, cerrarSesion, CUENTAS, iniciarSesion, rellenarLogin } from './ayudas';
+import { abrirLogin, cerrarSesion, CUENTAS, iniciarSesion, registrarCliente, rellenarLogin } from './ayudas';
 
 test.describe('Autenticación', () => {
   test('una contraseña errónea muestra un error', async ({ page }) => {
@@ -43,6 +43,32 @@ test.describe('Autenticación', () => {
     const menu = page.locator('#btn-user-role-menu');
     await expect(menu).toContainText('Prueba');
     await expect(menu).toContainText('cliente');
+  });
+
+  test('recupera la contraseña con el código y entra con la nueva', async ({ page }) => {
+    // Cuenta propia: cambiar la clave de una de seed.py rompería las demás pruebas.
+    const email = `e2e-recupera-${Date.now()}@test.com`;
+    await registrarCliente(page, email, 'Recupera');
+    await cerrarSesion(page);
+
+    await abrirLogin(page);
+    await page.locator('#btn-olvide-password').click();
+    await page.locator('#rec-email').fill(email);
+    await page.locator('#btn-enviar-codigo').click();
+
+    // Sin correo configurado (como en estas pruebas) el código se muestra en pantalla.
+    const aviso = page.getByRole('status');
+    await expect(aviso).toContainText(/Código \(modo desarrollo\): \d{6}/);
+    const codigo = (await aviso.textContent())!.match(/desarrollo\): (\d{6})/)![1];
+
+    await page.locator('#res-codigo').fill(codigo);
+    await page.locator('#res-password').fill('NuevaClave456');
+    await page.locator('#res-confirmacion').fill('NuevaClave456');
+    await page.locator('#btn-cambiar-password').click();
+    await expect(page.getByRole('status')).toContainText('Contraseña actualizada');
+
+    await rellenarLogin(page, email, 'NuevaClave456');
+    await expect(page.locator('#btn-user-role-menu')).toContainText('Recupera');
   });
 
   test('el registro avisa si las contraseñas no coinciden', async ({ page }) => {

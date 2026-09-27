@@ -9,6 +9,9 @@ test.describe('Visitante sin sesión', () => {
     // Servicios y productos vienen de la API (sembrados por seed.py).
     await expect(page.getByText('Consulta General').first()).toBeVisible();
     await expect(page.getByText('Juguete Mordedor Hueso').first()).toBeVisible();
+    // Precio y duración de los servicios (los recuperó la API; seed.py los rellena).
+    await expect(page.getByText('⏱️ 120 minutos')).toBeVisible();
+    await expect(page.getByText('$150.000')).toBeVisible();
   });
 
   test('adopciones se ven sin iniciar sesión', async ({ page }) => {

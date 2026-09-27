@@ -1,4 +1,4 @@
-import { expect, type Locator, type Page } from '@playwright/test';
+import { expect, type APIRequestContext, type Locator, type Page } from '@playwright/test';
 
 // Cuentas que crea backend/seed.py (base de pruebas; nunca la de desarrollo).
 export const CLAVE = 'mundopeludo2025';
@@ -62,4 +62,65 @@ export function fechaDentroDe(dias: number): string {
 /** Texto único por ejecución, para encontrar lo que crea cada prueba. */
 export function unico(prefijo: string): string {
   return `${prefijo} ${Date.now().toString(36)}`;
+}
+
+/**
+ * Como `unico`, pero sólo con letras y en formato título: el nombre de una
+ * mascota no admite números y el backend lo normaliza con `title()`.
+ */
+export function nombreUnico(prefijo: string): string {
+  const letras = Date.now()
+    .toString(36)
+    .replace(/\d/g, (d) => 'abcdefghij'[Number(d)]);
+  return `${prefijo} ${letras[0].toUpperCase()}${letras.slice(1)}`;
+}
+
+/** Registra una cuenta de cliente desde el formulario; queda con la sesión abierta. */
+export async function registrarCliente(page: Page, email: string, nombre: string, clave = 'ClaveSegura123') {
+  await abrirLogin(page);
+  await page.locator('#tab-registro').click();
+  await page.locator('#reg-nombre').fill(nombre);
+  await page.locator('#reg-apellidos').fill('Automática');
+  await page.locator('#reg-email').fill(email);
+  await page.locator('#reg-password').fill(clave);
+  await page.locator('#reg-confirmacion').fill(clave);
+  await page.locator('#btn-registro').click();
+  await expect(page.locator('#btn-user-role-menu')).toContainText(nombre);
+}
+
+/** PNG de 1x1 píxel, para subir como imagen de producto. */
+export const PNG_1PX = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+  'base64'
+);
+
+// ---------------------------------------------------------------------------
+// Preparación por la API: deja los datos que una prueba necesita sin pasar
+// por pantallas que no son las que se están probando.
+// ---------------------------------------------------------------------------
+export async function tokenDe(request: APIRequestContext, email: string, clave: string = CLAVE) {
+  const r = await request.post('/api/auth/login', { data: { email, password: clave } });
+  expect(r.ok(), await r.text()).toBeTruthy();
+  const { access_token, usuario } = await r.json();
+  return { headers: { Authorization: `Bearer ${access_token}` }, usuario };
+}
+
+/** Mascota nueva en adopción, sin tutor. Devuelve su id y su nombre. */
+export async function crearMascotaEnAdopcion(request: APIRequestContext, prefijo = 'Canela') {
+  const { headers } = await tokenDe(request, CUENTAS.admin);
+  const especies = await (await request.get('/api/especies')).json();
+  const nombre = nombreUnico(prefijo);
+  const r = await request.post('/api/mascotas', {
+    headers,
+    data: {
+      especie_id: especies[0].id,
+      nombre,
+      sexo: 'Hembra',
+      color: 'canela',
+      peso: 9,
+      estado_adopcion: 'en_adopcion'
+    }
+  });
+  expect(r.status(), await r.text()).toBe(201);
+  return { id: (await r.json()).id as number, nombre };
 }

@@ -162,7 +162,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onSesionIniciada, aviso, o
           <h1 className="text-lg font-extrabold text-[#1d4f60]">{titulos[modo]}</h1>
 
           {exito && (
-            <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-start gap-2">
+            <div role="status" className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-start gap-2">
               <CheckCircle2 className="w-4 h-4 shrink-0 mt-px" />
               <span>{exito}</span>
             </div>
@@ -190,7 +190,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onSesionIniciada, aviso, o
                 <LogIn className="w-4 h-4" />
                 {enviando ? 'Entrando…' : 'Entrar'}
               </button>
-              <button type="button" onClick={() => cambiarModo('recuperar')}
+              <button id="btn-olvide-password" type="button" onClick={() => cambiarModo('recuperar')}
                 className="w-full text-xs font-semibold text-[#1d95c8] hover:text-[#156a8e] hover:underline">
                 ¿Olvidaste tu contraseña?
               </button>
@@ -251,7 +251,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onSesionIniciada, aviso, o
                 <input id="rec-email" type="email" autoComplete="email" required
                   value={email} onChange={(e) => setEmail(e.target.value)} className={estiloCampo} />
               </div>
-              <button type="submit" disabled={enviando} className={estiloBoton}>
+              <button id="btn-enviar-codigo" type="submit" disabled={enviando} className={estiloBoton}>
                 <KeyRound className="w-4 h-4" />
                 {enviando ? 'Enviando…' : 'Enviar código'}
               </button>
@@ -283,7 +283,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onSesionIniciada, aviso, o
                     value={confirmacion} onChange={(e) => setConfirmacion(e.target.value)} className={estiloCampo} />
                 </div>
               </div>
-              <button type="submit" disabled={enviando} className={estiloBoton}>
+              <button id="btn-cambiar-password" type="submit" disabled={enviando} className={estiloBoton}>
                 <KeyRound className="w-4 h-4" />
                 {enviando ? 'Guardando…' : 'Cambiar contraseña'}
               </button>
