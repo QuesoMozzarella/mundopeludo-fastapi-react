@@ -1019,6 +1019,59 @@ def test_correo_smtp_arma_el_mensaje():
     assert "Ana Pérez" in partes["text/plain"]
 
 
+def test_correo_redirigido_en_desarrollo():
+    import smtplib
+
+    from app.domain.ports.services import AvisoCita
+    from app.infrastructure.notificaciones.adaptadores import CorreoSmtp
+
+    enviados = []
+
+    class SmtpFalso:
+        def __init__(self, host, puerto, timeout=None):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def starttls(self, context=None):
+            pass
+
+        def send_message(self, mensaje):
+            enviados.append(mensaje)
+
+    aviso = AvisoCita(
+        email="tutor@example.com", nombre="Tutor", mascota="Luna",
+        fecha_hora=datetime(2030, 1, 1, 10, 0), veterinario="Vet", servicio="Consulta",
+        motivo="Control",
+    )
+    original = smtplib.SMTP
+    smtplib.SMTP = SmtpFalso
+    try:
+        CorreoSmtp("smtp.test", 587, "", "", "sistema@test.com",
+                   redirigir_a="yo@test.com").cita_confirmada(aviso)
+        CorreoSmtp("smtp.test", 587, "", "", "sistema@test.com").cita_confirmada(aviso)
+    finally:
+        smtplib.SMTP = original
+
+    redirigido, directo = enviados
+    assert redirigido["To"] == "yo@test.com", redirigido["To"]
+    assert redirigido["Subject"].startswith("[Para tutor@example.com] "), redirigido["Subject"]
+    assert redirigido["X-MundoPeludo-Destinatario-Original"] == "tutor@example.com"
+    assert directo["To"] == "tutor@example.com" and not directo["Subject"].startswith("[Para")
+
+    try:
+        create_app(Config(ruta_bd=":memory:", entorno="produccion", secreto_jwt="clave-propia",
+                          correo_redirigir_a="yo@test.com"))
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("arrancó en producción redirigiendo los correos de los tutores")
+
+
 def test_api_cerrada_por_defecto():
     anterior = os.environ.pop("MP_REQUIRE_AUTH", None)
     try:

@@ -34,6 +34,11 @@ class Config:
     correo_usuario: str = field(default_factory=lambda: os.getenv("MP_EMAIL_USER", ""))
     correo_password: str = field(default_factory=lambda: os.getenv("MP_EMAIL_PASSWORD", ""))
     correo_remitente: str = field(default_factory=lambda: os.getenv("MP_EMAIL_FROM", ""))
+    # Fuera de producción, todos los correos van a esta dirección en vez de al
+    # destinatario real (los tutores de `seed.py` no existen).
+    correo_redirigir_a: str = field(
+        default_factory=lambda: os.getenv("MP_EMAIL_REDIRIGIR_A", "").strip()
+    )
 
     @property
     def correo_configurado(self) -> bool:
@@ -49,6 +54,9 @@ class Config:
             # La clave de desarrollo está en el repositorio: con ella cualquiera
             # puede firmar un token de administrador.
             raise RuntimeError("MP_SECRET_KEY es obligatoria en producción")
+        if self.es_produccion and self.correo_redirigir_a:
+            # En producción los avisos tienen que llegar a cada tutor.
+            raise RuntimeError("MP_EMAIL_REDIRIGIR_A sólo se admite fuera de producción")
 
 
 config = Config()

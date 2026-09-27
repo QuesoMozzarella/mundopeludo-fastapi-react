@@ -23,6 +23,10 @@ class CorreoSmtp(Notificaciones):
 
     Con el puerto 465 abre la conexión cifrada desde el inicio; con cualquier
     otro (587 en Gmail) usa STARTTLS si `usar_tls` está activo.
+
+    Con `redirigir_a` (sólo en desarrollo) todo va a esa dirección; el
+    destinatario real queda en el asunto y en la cabecera
+    `X-MundoPeludo-Destinatario-Original`.
     """
 
     def __init__(
@@ -34,6 +38,7 @@ class CorreoSmtp(Notificaciones):
         remitente: str,
         usar_tls: bool = True,
         timeout: float = 15,
+        redirigir_a: str = "",
     ):
         self.host = host
         self.puerto = puerto
@@ -42,6 +47,7 @@ class CorreoSmtp(Notificaciones):
         self.remitente = remitente or usuario
         self.usar_tls = usar_tls
         self.timeout = timeout
+        self.redirigir_a = redirigir_a
 
     def codigo_recuperacion(self, usuario: Usuario, codigo: CodigoRecuperacion) -> None:
         asunto, texto, html = plantillas.codigo_recuperacion(
@@ -60,6 +66,10 @@ class CorreoSmtp(Notificaciones):
 
     def _enviar(self, destinatario: str, asunto: str, texto: str, html: str) -> None:
         mensaje = EmailMessage()
+        if self.redirigir_a:
+            mensaje["X-MundoPeludo-Destinatario-Original"] = destinatario
+            asunto = f"[Para {destinatario}] {asunto}"
+            destinatario = self.redirigir_a
         mensaje["Subject"] = asunto
         mensaje["From"] = self.remitente
         mensaje["To"] = destinatario

@@ -158,6 +158,7 @@ class Contenedor:
             c.correo_password,
             c.correo_remitente,
             usar_tls=c.correo_tls,
+            redirigir_a=c.correo_redirigir_a,
         )
 
     def preparar(self) -> None:
