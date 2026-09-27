@@ -1,70 +1,416 @@
 @import "tailwindcss";
 
+/*
+ * Sistema visual de Mundo Peludo: la estética de los dashboards del Django
+ * (legacy_django/static/css/variables.css y dashboard.css) llevada a todo el
+ * sitio. Lienzo azul clínica, secciones azul hondo con texto blanco, datos
+ * sobre "papel" claro con cabeceras petróleo, píldoras de estado y el naranja
+ * de la huella sólo para la acción principal de cada pantalla.
+ */
 @theme {
-  --color-brand-primary: #1d95c8;
-  --color-brand-primary-dark: #156a8e;
-  --color-brand-primary-darker: #1d4f60;
-  --color-brand-secondary: #ff9f43;
-  --color-brand-secondary-dark: #f08e30;
-  --color-brand-accent: #5dca88;
-  --color-brand-info: #00bcd4;
-  --color-brand-info-dark: #0097a7;
-  --color-brand-bg: #f7fbfe;
-  --color-brand-light: #9dddf5;
-  --color-brand-warm: #fff5e6;
-  --font-sans: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, 'Roboto', 'Plus Jakarta Sans', sans-serif;
-  --font-heading: 'Outfit', 'Segoe UI', system-ui, sans-serif;
+  --color-clinica: #1d95c8;        /* lienzo: el azul del globo del logo */
+  --color-clinica-hondo: #156a8e;  /* secciones sobre el lienzo */
+  --color-petroleo: #1d4f60;       /* barra, pie y cabeceras de tabla */
+  --color-huella: #ff9f43;         /* acción principal */
+  --color-huella-hondo: #f08e30;
+  --color-campo: #5dca88;          /* éxito, activo, confirmado */
+  --color-alerta: #dc3545;         /* peligro, cancelado */
+  --color-papel: #f8f9fa;          /* superficies de datos */
+  --color-tinta: #2c3e50;          /* texto sobre papel */
+  --color-cielo: #9dddf5;          /* acentos claros sobre azul */
+
+  --font-sans: 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif;
+  --font-titulo: 'Outfit', 'Segoe UI', system-ui, sans-serif;
 }
 
-:root {
-  /* Legacy MundoPeludo original CSS Variables */
-  --color-primary: #1d95c8;
-  --color-primary-dark: #156a8e;
-  --color-primary-darker: #1d4f60;
-  --color-secondary: #ff9f43;
-  --color-secondary-dark: #f08e30;
-  --color-accent: #5dca88;
-  --color-info: #00bcd4;
-  --color-info-dark: #0097a7;
-  --color-bg-main: #f7fbfe;
-  --color-bg-light: #9dddf5;
-  --color-bg-warm: #fff5e6;
-  --color-bg-white: #ffffff;
-  --color-bg-dark: #1d4f60;
-  --color-text: #333333;
-  --color-text-white: #ffffff;
-  --font-family: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, 'Roboto', 'Plus Jakarta Sans', sans-serif;
+/* ------------------------------ base ------------------------------ */
+html {
+  background-color: var(--color-clinica);
 }
 
 body {
-  background-color: var(--color-bg-main);
-  color: var(--color-text);
-  font-family: var(--font-family);
+  background-color: var(--color-clinica);
+  color: #ffffff;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
 }
 
-h1, h2, h3, h4, h5, h6 {
-  font-family: var(--font-family);
+h1, h2, h3 {
+  font-family: var(--font-titulo);
+  letter-spacing: -0.01em;
 }
 
-/* Legacy Card accent */
-.card-mundo {
+/* Los campos nunca heredan el blanco del lienzo: siempre tinta sobre blanco. */
+input, select, textarea {
+  color: var(--color-tinta);
   background-color: #ffffff;
+}
+input::placeholder, textarea::placeholder {
+  color: #8a99a8;
+}
+option {
+  color: var(--color-tinta);
+}
+
+/* Foco visible para teclado en todo el sitio. */
+:focus-visible {
+  outline: 3px solid var(--color-huella);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ------------------------------ página ------------------------------ */
+.mp-titulo {
+  font-family: var(--font-titulo);
+  font-size: clamp(1.75rem, 1.4rem + 1.4vw, 2.5rem);
+  font-weight: 700;
+  line-height: 1.1;
+  color: #ffffff;
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.mp-descripcion {
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 0.95rem;
+  max-width: 70ch;
+}
+
+/* Sección azul hondo con texto blanco: la `.seccion` del Django. */
+.mp-panel {
+  background-color: var(--color-clinica-hondo);
+  border-radius: 16px;
+  color: #ffffff;
+  padding: 1.5rem;
+}
+
+.mp-panel-titulo {
+  font-family: var(--font-titulo);
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: #ffffff;
+  padding-bottom: 0.6rem;
+  margin-bottom: 1rem;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.3);
+}
+
+/* Superficie de datos: tablas, fichas y formularios. */
+.mp-papel {
+  background-color: var(--color-papel);
+  color: var(--color-tinta);
+  border: 1px solid #e9ecef;
   border-radius: 12px;
-  border-top: 4px solid var(--color-primary);
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
-  transition: transform 0.25s ease, box-shadow 0.25s ease;
 }
 
-.card-mundo:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.08);
+.mp-papel-blanco {
+  background-color: #ffffff;
+  color: var(--color-tinta);
+  border-radius: 12px;
 }
 
-/* Highlight box matching legacy */
-.highlight-box {
-  background-color: var(--color-bg-warm);
-  border-left: 4px solid var(--color-secondary);
+/* Tarjeta de estadística translúcida: la `.admin-stat-card` del Django. */
+.mp-stat {
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 12px;
   padding: 1rem;
-  border-radius: 0 8px 8px 0;
+  color: #ffffff;
 }
 
+.mp-stat-valor {
+  font-family: var(--font-titulo);
+  font-size: 1.9rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* ------------------------------ tablas ------------------------------ */
+.mp-tabla {
+  width: 100%;
+  font-size: 0.85rem;
+  color: var(--color-tinta);
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.mp-tabla th {
+  background-color: var(--color-petroleo);
+  color: #ffffff;
+  font-weight: 600;
+  text-align: left;
+  padding: 0.75rem 1rem;
+  white-space: nowrap;
+}
+
+.mp-tabla td {
+  padding: 0.8rem 1rem;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  font-weight: 500;
+  vertical-align: middle;
+}
+
+.mp-tabla tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.mp-tabla tbody tr:hover {
+  background-color: rgba(29, 149, 200, 0.06);
+}
+
+/* ------------------------------ píldoras ------------------------------ */
+.mp-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.2rem 0.65rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+  color: #ffffff;
+  background-color: #6c7a89;
+}
+
+.mp-pill--exito { background-color: #3aa76d; }
+.mp-pill--info { background-color: var(--color-clinica); }
+.mp-pill--pendiente { background-color: var(--color-huella-hondo); }
+.mp-pill--peligro { background-color: var(--color-alerta); }
+.mp-pill--neutro { background-color: #6c7a89; }
+.mp-pill--suave { background-color: rgba(255, 255, 255, 0.2); }
+
+/* ------------------------------ botones ------------------------------ */
+.mp-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  padding: 0.6rem 1.1rem;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+  border: 1px solid transparent;
+}
+
+.mp-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.mp-btn--primario { background-color: var(--color-huella); color: #ffffff; }
+.mp-btn--primario:not(:disabled):hover { background-color: var(--color-huella-hondo); }
+
+.mp-btn--azul { background-color: var(--color-clinica); color: #ffffff; }
+.mp-btn--azul:not(:disabled):hover { background-color: var(--color-clinica-hondo); }
+
+.mp-btn--claro { background-color: #ffffff; color: var(--color-clinica-hondo); }
+.mp-btn--claro:not(:disabled):hover { background-color: #e8f6fc; }
+
+.mp-btn--fantasma {
+  background-color: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.35);
+  color: #ffffff;
+}
+.mp-btn--fantasma:not(:disabled):hover { background-color: rgba(255, 255, 255, 0.22); }
+
+.mp-btn--borde {
+  background-color: #ffffff;
+  border-color: #cfd8e0;
+  color: var(--color-tinta);
+}
+.mp-btn--borde:not(:disabled):hover { background-color: #eef3f7; }
+
+.mp-btn--peligro { background-color: var(--color-alerta); color: #ffffff; }
+.mp-btn--peligro:not(:disabled):hover { background-color: #b92b39; }
+
+.mp-btn--exito { background-color: #3aa76d; color: #ffffff; }
+.mp-btn--exito:not(:disabled):hover { background-color: #2f8a59; }
+
+.mp-btn--sm { padding: 0.4rem 0.75rem; font-size: 0.8rem; border-radius: 8px; }
+
+/* Botón de acción redondo de las tablas del Django. */
+.mp-accion {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  background-color: var(--color-clinica);
+  transition: background-color 0.2s ease;
+  flex-shrink: 0;
+}
+.mp-accion:hover { background-color: var(--color-clinica-hondo); }
+.mp-accion--peligro { background-color: var(--color-alerta); }
+.mp-accion--peligro:hover { background-color: #b92b39; }
+.mp-accion--neutro { background-color: #6c7a89; }
+.mp-accion--neutro:hover { background-color: #56626e; }
+
+/* ------------------------------ pestañas y filtros ------------------------------ */
+/* Las `.nav-tabs` del Django: translúcidas sobre el azul, activa en blanco. */
+.mp-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.3);
+}
+
+.mp-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.6rem 1.1rem;
+  border-radius: 12px 12px 0 0;
+  background-color: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  font-weight: 500;
+  font-size: 0.9rem;
+  transition: background-color 0.2s ease;
+}
+.mp-tab:hover { background-color: rgba(255, 255, 255, 0.2); }
+.mp-tab[aria-current='page'],
+.mp-tab[aria-selected='true'] {
+  background-color: rgba(255, 255, 255, 0.95);
+  color: var(--color-clinica-hondo);
+  font-weight: 600;
+}
+
+.mp-filtro {
+  padding: 0.4rem 0.9rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  background-color: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  transition: background-color 0.2s ease;
+}
+.mp-filtro:hover { background-color: rgba(255, 255, 255, 0.22); }
+.mp-filtro[aria-pressed='true'] {
+  background-color: #ffffff;
+  color: var(--color-clinica-hondo);
+  border-color: #ffffff;
+}
+
+/* ------------------------------ formularios ------------------------------ */
+.mp-etiqueta {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-tinta);
+  margin-bottom: 0.35rem;
+}
+
+.mp-panel .mp-etiqueta { color: #ffffff; }
+
+.mp-campo {
+  width: 100%;
+  padding: 0.6rem 0.8rem;
+  border-radius: 10px;
+  border: 1px solid #cfd8e0;
+  background-color: #ffffff;
+  color: var(--color-tinta);
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+.mp-campo::placeholder { color: #8a99a8; font-weight: 400; }
+.mp-campo:focus {
+  outline: none;
+  border-color: var(--color-clinica);
+  box-shadow: 0 0 0 3px rgba(29, 149, 200, 0.25);
+}
+.mp-campo:disabled { background-color: #eef1f4; color: #7b8894; }
+
+.mp-ayuda { font-size: 0.75rem; color: #5b6b7a; margin-top: 0.3rem; }
+.mp-panel .mp-ayuda { color: rgba(255, 255, 255, 0.75); }
+
+/* Buscador sobre el lienzo azul. */
+.mp-buscador {
+  position: relative;
+}
+.mp-buscador .mp-campo {
+  padding-left: 2.4rem;
+  border-color: transparent;
+}
+
+/* ------------------------------ modales ------------------------------ */
+.mp-modal-fondo {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 1rem;
+  overflow-y: auto;
+  background-color: rgba(18, 48, 60, 0.65);
+}
+
+.mp-modal {
+  width: 100%;
+  margin: 2rem 0;
+  background-color: #ffffff;
+  color: var(--color-tinta);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 5px 25px rgba(0, 0, 0, 0.25);
+}
+
+.mp-modal-cabecera {
+  background-color: var(--color-petroleo);
+  color: #ffffff;
+  padding: 1rem 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.mp-modal-cabecera h2 {
+  font-size: 1.15rem;
+  font-weight: 600;
+}
+
+/* ------------------------------ avisos ------------------------------ */
+.mp-aviso {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  padding: 0.75rem 1rem;
+  border-radius: 10px;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+.mp-aviso--error { background-color: #fdecee; color: #8f1d2a; border: 1px solid #f5c2c7; }
+.mp-aviso--exito { background-color: #e7f6ee; color: #1f6b43; border: 1px solid #bfe6cf; }
+.mp-aviso--info { background-color: #e8f6fc; color: #145a78; border: 1px solid #bfe3f3; }
+
+/* Scroll horizontal de tablas en pantallas estrechas. */
+.mp-desplazable {
+  /* relative: los textos ocultos (sr-only) de las tablas no escapan del scroll. */
+  position: relative;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-clinica) #e9eef2;
+}
+
+.sr-only-focusable:not(:focus) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}

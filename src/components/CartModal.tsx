@@ -1,18 +1,8 @@
 import React, { useState } from 'react';
 import { CartItem, User } from '../types';
-import { 
-  ShoppingBag, 
-  Trash2, 
-  Plus, 
-  Minus, 
-  CreditCard, 
-  Banknote, 
-  Building2, 
-  CheckCircle2, 
-  X, 
-  ArrowRight,
-  ShieldCheck
-} from 'lucide-react';
+import { formatearPrecio } from '../formato';
+import { ErrorFormulario, ImagenProducto, Modal } from './ui';
+import { Banknote, Building2, CheckCircle2, CreditCard, Minus, Plus, ShoppingBag, Trash2 } from 'lucide-react';
 
 interface CartModalProps {
   isOpen: boolean;
@@ -31,6 +21,12 @@ interface CartModalProps {
   }) => Promise<any>;
 }
 
+const METODOS = [
+  { id: 'tarjeta', nombre: 'Tarjeta', Icono: CreditCard },
+  { id: 'efectivo', nombre: 'Efectivo', Icono: Banknote },
+  { id: 'transferencia', nombre: 'Transferencia', Icono: Building2 }
+];
+
 export const CartModal: React.FC<CartModalProps> = ({
   isOpen,
   onClose,
@@ -45,250 +41,141 @@ export const CartModal: React.FC<CartModalProps> = ({
   const [metodoPago, setMetodoPago] = useState<string>('tarjeta');
   const [direccion, setDireccion] = useState<string>(currentUser?.direccion || '');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [orderCompleted, setOrderCompleted] = useState<any | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [pedido, setPedido] = useState<{ pedido_id: number; total: number } | null>(null);
 
   if (!isOpen) return null;
 
-  const total = cartItems.reduce(
-    (acc, item) => acc + item.producto.precio_final * item.cantidad, 
-    0
-  );
+  const total = cartItems.reduce((acc, item) => acc + item.producto.precio_final * item.cantidad, 0);
+  const unidades = cartItems.reduce((acc, item) => acc + item.cantidad, 0);
 
-  const handlePay = async (e: React.FormEvent) => {
+  const cerrar = () => {
+    setPedido(null);
+    setError(null);
+    onClose();
+  };
+
+  const pagar = async (e: React.FormEvent) => {
     e.preventDefault();
     if (cartItems.length === 0) return;
-    if (!currentUser) {
-      onRequiereLogin();
-      return;
-    }
-
+    if (!currentUser) return onRequiereLogin();
+    setError(null);
     try {
       setIsSubmitting(true);
-      const itemsPayload = cartItems.map(item => ({
-        producto_id: item.producto.id,
-        cantidad: item.cantidad
-      }));
-
       const res = await onCheckout({
-        items: itemsPayload,
-        direccion_envio: direccion,
+        items: cartItems.map((item) => ({ producto_id: item.producto.id, cantidad: item.cantidad })),
+        direccion_envio: direccion.trim(),
         metodo_pago: metodoPago
       });
-
-      setOrderCompleted(res);
+      setPedido(res);
       onClearCart();
     } catch (err: any) {
-      alert(err.message || 'Error al procesar la compra.');
+      setError(err.message || 'No se pudo completar la compra.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto">
-      <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-xl overflow-hidden my-8 flex flex-col max-h-[90vh]">
-        {/* Header */}
-        <div className="bg-[#1d4f60] text-white px-6 py-4 flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-2">
-            <ShoppingBag className="w-5 h-5 text-[#ff9f43]" />
-            <h3 className="font-bold text-lg">Carrito de Compras</h3>
-          </div>
-          <button 
-            onClick={onClose}
-            className="text-sky-200 hover:text-white p-1 rounded-lg"
-          >
-            <X className="w-5 h-5" />
-          </button>
+    <Modal titulo={pedido ? 'Pedido confirmado' : 'Tu carrito'} icono={<ShoppingBag className="w-5 h-5 text-[#ff9f43]" />} onCerrar={cerrar} ancho="lg">
+      {pedido ? (
+        <div className="p-8 text-center space-y-4">
+          <CheckCircle2 className="w-14 h-14 text-[#3aa76d] mx-auto" />
+          <h3 className="font-titulo text-2xl font-semibold text-[#1d4f60]">Pedido #PED-{pedido.pedido_id} registrado</h3>
+          <p className="text-sm text-slate-600 max-w-sm mx-auto">
+            Lo verás en la clínica con tu nombre. Total: <strong>{formatearPrecio(pedido.total)}</strong>, pago con{' '}
+            {METODOS.find((m) => m.id === metodoPago)?.nombre.toLowerCase()}.
+          </p>
+          <button onClick={cerrar} className="mp-btn mp-btn--azul">Seguir comprando</button>
         </div>
-
-        {orderCompleted ? (
-          /* Order Confirmation Screen */
-          <div className="p-8 text-center space-y-4 my-auto">
-            <div className="w-16 h-16 rounded-full bg-[#5dca88]/20 text-[#5dca88] flex items-center justify-center mx-auto">
-              <CheckCircle2 className="w-10 h-10" />
-            </div>
-            <h3 className="text-2xl font-extrabold text-[#156a8e]">¡Pedido Confirmado con Éxito!</h3>
-            <p className="text-sm text-slate-600 max-w-md mx-auto">
-              Tu orden ha sido registrada en el sistema de Mundo Peludo y descontada del inventario clínico en tiempo real.
-            </p>
-            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 text-left text-xs max-w-md mx-auto space-y-2">
-              <div className="flex justify-between">
-                <span className="text-slate-500">ID de Pedido:</span>
-                <span className="font-mono font-bold">#PED-{orderCompleted.pedido_id || Math.floor(1000 + Math.random() * 9000)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">Cliente:</span>
-                <span className="font-semibold">{currentUser?.nombre} {currentUser?.apellidos}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">Total Pagado:</span>
-                <span className="font-bold text-[#1d95c8]">${orderCompleted.total?.toLocaleString('es-CL') || total.toLocaleString('es-CL')}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">Método de Pago:</span>
-                <span className="capitalize font-medium">{metodoPago}</span>
-              </div>
-            </div>
-            <button
-              onClick={() => {
-                setOrderCompleted(null);
-                onClose();
-              }}
-              className="px-6 py-2.5 rounded-xl bg-[#1d95c8] hover:bg-[#156a8e] text-white font-bold text-xs transition-colors shadow-sm"
-            >
-              Cerrar y Continuar
-            </button>
-          </div>
-        ) : (
-          /* Cart Content */
-          <div className="p-6 overflow-y-auto flex-1 space-y-6">
-            {cartItems.length === 0 ? (
-              <div className="text-center py-12">
-                <ShoppingBag className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                <h4 className="text-base font-bold text-slate-700">Tu carrito está vacío</h4>
-                <p className="text-xs text-slate-400 mt-1">Explora nuestra farmacia y tienda de alimentos para añadir productos.</p>
-              </div>
-            ) : (
-              <>
-                {/* Items List */}
-                <div className="divide-y divide-slate-100">
-                  {cartItems.map((item) => (
-                    <div key={item.producto.id} className="py-3 flex items-center justify-between gap-3">
-                      <img 
-                        src={item.producto.imagen_url || "https://images.unsplash.com/photo-1589924691995-400dc9ecc119?w=100&auto=format&fit=crop&q=80"} 
-                        alt={item.producto.nombre} 
-                        className="w-12 h-12 rounded-xl object-cover border border-slate-200 shrink-0"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <h4 className="text-xs font-bold text-slate-900 truncate">{item.producto.nombre}</h4>
-                        <div className="text-[11px] text-slate-500">
-                          ${item.producto.precio_final.toLocaleString('es-CL')} c/u
-                        </div>
-                      </div>
-
-                      {/* Quantity buttons */}
-                      <div className="flex items-center gap-2 border border-slate-200 rounded-lg p-1">
-                        <button
-                          onClick={() => onUpdateQuantity(item.producto.id, -1)}
-                          className="p-1 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded"
-                        >
-                          <Minus className="w-3 h-3" />
-                        </button>
-                        <span className="text-xs font-bold px-1">{item.cantidad}</span>
-                        <button
-                          onClick={() => onUpdateQuantity(item.producto.id, 1)}
-                          className="p-1 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded"
-                        >
-                          <Plus className="w-3 h-3" />
-                        </button>
-                      </div>
-
-                      {/* Item Total */}
-                      <div className="text-right min-w-[70px]">
-                        <span className="text-xs font-bold text-slate-900">
-                          ${(item.producto.precio_final * item.cantidad).toLocaleString('es-CL')}
-                        </span>
-                      </div>
-
-                      {/* Remove button */}
-                      <button
-                        onClick={() => onRemoveItem(item.producto.id)}
-                        className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  ))}
+      ) : cartItems.length === 0 ? (
+        <div className="p-10 text-center space-y-3">
+          <ShoppingBag className="w-12 h-12 text-[#1d95c8] mx-auto" />
+          <p className="font-semibold">Tu carrito está vacío</p>
+          <p className="text-sm text-slate-500">Añade productos desde la tienda.</p>
+          <button onClick={cerrar} className="mp-btn mp-btn--azul">Ir a la tienda</button>
+        </div>
+      ) : (
+        <form onSubmit={pagar} className="p-6 space-y-5">
+          <ErrorFormulario texto={error} />
+          <ul className="divide-y divide-slate-200 max-h-72 overflow-y-auto -mx-2 px-2">
+            {cartItems.map((item) => (
+              <li key={item.producto.id} className="py-3 flex items-center gap-3">
+                <ImagenProducto
+                  nombre={item.producto.nombre}
+                  imagen={item.producto.imagen_url}
+                  categoria={item.producto.categoria}
+                  className="w-14 h-14 rounded-lg shrink-0"
+                  tamanoIcono="w-6 h-6"
+                />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold truncate">{item.producto.nombre}</p>
+                  <p className="text-xs text-slate-500">{formatearPrecio(item.producto.precio_final)} c/u</p>
                 </div>
-
-                {/* Shipping & Payment Form */}
-                <form onSubmit={handlePay} className="space-y-4 pt-4 border-t border-slate-200">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                      Dirección de Despacho o Retiro en Clínica
-                    </label>
-                    <input
-                      type="text"
-                      id="input-cart-direccion"
-                      value={direccion}
-                      onChange={(e) => setDireccion(e.target.value)}
-                      placeholder="Calle, número, depto / Retiro en clínica"
-                      className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs focus:outline-none focus:ring-2 focus:ring-amber-500"
-                      // Un visitante no llega a pagar: el botón le lleva al login.
-                      required={currentUser !== null}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                      Método de Pago
-                    </label>
-                    <div className="grid grid-cols-3 gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setMetodoPago('tarjeta')}
-                        className={`p-2.5 rounded-xl border text-xs font-semibold flex flex-col items-center gap-1 transition-all ${metodoPago === 'tarjeta' ? 'border-[#1d95c8] bg-[#e8f4f9] text-[#156a8e] shadow-2xs' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}
-                      >
-                        <CreditCard className="w-4 h-4 text-[#1d95c8]" />
-                        <span>Tarjeta</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setMetodoPago('efectivo')}
-                        className={`p-2.5 rounded-xl border text-xs font-semibold flex flex-col items-center gap-1 transition-all ${metodoPago === 'efectivo' ? 'border-[#1d95c8] bg-[#e8f4f9] text-[#156a8e] shadow-2xs' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}
-                      >
-                        <Banknote className="w-4 h-4 text-[#5dca88]" />
-                        <span>Efectivo</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setMetodoPago('transferencia')}
-                        className={`p-2.5 rounded-xl border text-xs font-semibold flex flex-col items-center gap-1 transition-all ${metodoPago === 'transferencia' ? 'border-[#1d95c8] bg-[#e8f4f9] text-[#156a8e] shadow-2xs' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}
-                      >
-                        <Building2 className="w-4 h-4 text-[#156a8e]" />
-                        <span>Transferencia</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Summary */}
-                  <div className="bg-slate-50 p-4 rounded-2xl space-y-2 text-xs">
-                    <div className="flex justify-between text-slate-600">
-                      <span>Subtotal</span>
-                      <span>${total.toLocaleString('es-CL')}</span>
-                    </div>
-                    <div className="flex justify-between text-slate-600">
-                      <span>Despacho</span>
-                      <span className="text-[#5dca88] font-semibold">Gratis</span>
-                    </div>
-                    <div className="flex justify-between text-base font-extrabold text-slate-900 pt-2 border-t border-slate-200">
-                      <span>Total a Pagar</span>
-                      <span>${total.toLocaleString('es-CL')}</span>
-                    </div>
-                  </div>
-
-                  {/* Submit Button */}
-                  <button
-                    type="submit"
-                    id="btn-confirmar-compra"
-                    disabled={isSubmitting}
-                    className="w-full py-3 rounded-xl bg-[#ff9f43] hover:bg-[#f08e30] text-white font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50 active:scale-98"
-                  >
-                    <ShieldCheck className="w-4 h-4" />
-                    <span>{isSubmitting
-                        ? 'Procesando Pago...'
-                        : currentUser
-                          ? `Pagar $${total.toLocaleString('es-CL')}`
-                          : 'Inicia sesión para pagar'}</span>
+                <div className="flex items-center gap-1" role="group" aria-label={`Cantidad de ${item.producto.nombre}`}>
+                  <button type="button" onClick={() => onUpdateQuantity(item.producto.id, -1)} aria-label="Quitar uno" className="mp-accion mp-accion--neutro w-7 h-7">
+                    <Minus className="w-3.5 h-3.5" />
                   </button>
-                </form>
-              </>
-            )}
+                  <span className="w-7 text-center text-sm font-semibold" aria-live="polite">{item.cantidad}</span>
+                  <button
+                    type="button"
+                    onClick={() => onUpdateQuantity(item.producto.id, 1)}
+                    disabled={item.cantidad >= item.producto.stock}
+                    aria-label="Añadir uno"
+                    className="mp-accion w-7 h-7 disabled:opacity-40"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                <span className="w-20 text-right text-sm font-bold">{formatearPrecio(item.producto.precio_final * item.cantidad)}</span>
+                <button type="button" onClick={() => onRemoveItem(item.producto.id)} aria-label={`Quitar ${item.producto.nombre}`} className="p-1.5 text-slate-400 hover:text-[#dc3545]">
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </li>
+            ))}
+          </ul>
+
+          <div>
+            <label htmlFor="input-cart-direccion" className="mp-etiqueta">Dirección de entrega</label>
+            <input
+              id="input-cart-direccion"
+              type="text"
+              placeholder="Calle y número, o «Retiro en la clínica»"
+              value={direccion}
+              onChange={(e) => setDireccion(e.target.value)}
+              className="mp-campo"
+              required={Boolean(currentUser)}
+            />
           </div>
-        )}
-      </div>
-    </div>
+
+          <fieldset>
+            <legend className="mp-etiqueta">Forma de pago</legend>
+            <div className="grid grid-cols-3 gap-2">
+              {METODOS.map(({ id, nombre, Icono }) => (
+                <label
+                  key={id}
+                  className={`flex flex-col items-center gap-1 p-3 rounded-lg border text-sm font-semibold cursor-pointer ${
+                    metodoPago === id ? 'border-[#1d95c8] bg-[#e8f6fc] text-[#156a8e]' : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  <input type="radio" name="metodo-pago" value={id} checked={metodoPago === id} onChange={() => setMetodoPago(id)} className="sr-only" />
+                  <Icono className="w-5 h-5" />
+                  {nombre}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+
+          <div className="flex items-center justify-between border-t border-slate-200 pt-4">
+            <span className="text-sm text-slate-600">{unidades} {unidades === 1 ? 'producto' : 'productos'}</span>
+            <span className="text-xl font-bold">Total {formatearPrecio(total)}</span>
+          </div>
+
+          <button type="submit" id="btn-confirmar-compra" disabled={isSubmitting} className="mp-btn mp-btn--primario w-full">
+            {!currentUser ? 'Inicia sesión para pagar' : isSubmitting ? 'Procesando…' : `Confirmar compra por ${formatearPrecio(total)}`}
+          </button>
+        </form>
+      )}
+    </Modal>
   );
 };

@@ -1,18 +1,14 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { HistorialMedico, Mascota, User, Cita } from '../types';
 import { formatearFechaHora } from '../formato';
-import { 
-  ClipboardList, 
-  Plus, 
-  Calendar, 
-  User as UserIcon, 
-  Stethoscope, 
-  Pill, 
-  FileText, 
-  CheckCircle2, 
-  X, 
-  Search 
-} from 'lucide-react';
+import { Encabezado, ErrorFormulario, Modal, PieModal, Vacio, useInterfaz } from './ui';
+import { ClipboardList, ClipboardPlus, Search, Stethoscope } from 'lucide-react';
+
+/** Lo que llega al pulsar "Historia" en una mascota o "Atender" en una cita. */
+export interface NuevaHistoria {
+  mascota: Mascota | null;
+  citaId?: number;
+}
 
 interface HistorialViewProps {
   historiales: HistorialMedico[];
@@ -22,12 +18,13 @@ interface HistorialViewProps {
   onCreateHistorial: (data: {
     cita_id?: number | null;
     mascota_id: number;
-    veterinario_id: number;
+    veterinario_id?: number;
     diagnostico: string;
     tratamiento: string;
     observaciones?: string;
   }) => Promise<void>;
-  initialSelectedPet?: Mascota | null;
+  /** Abre el formulario ya con la mascota (y la cita) elegidas. */
+  nuevaHistoria?: NuevaHistoria | null;
 }
 
 export const HistorialView: React.FC<HistorialViewProps> = ({
@@ -36,296 +33,237 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
   citas,
   currentUser,
   onCreateHistorial,
-  initialSelectedPet
+  nuevaHistoria
 }) => {
-  const [selectedPetFilter, setSelectedPetFilter] = useState<string>(initialSelectedPet ? String(initialSelectedPet.id) : 'todos');
+  const { avisar } = useInterfaz();
+  const esPersonal = currentUser.tipo !== 'cliente';
+  const [filtroMascota, setFiltroMascota] = useState<string>(nuevaHistoria?.mascota ? String(nuevaHistoria.mascota.id) : 'todos');
   const [search, setSearch] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Form State
-  const [mascotaId, setMascotaId] = useState<number>(initialSelectedPet?.id || mascotas[0]?.id || 1);
-  const [citaId, setCitaId] = useState<number | null>(null);
+  // Formulario
+  const [mascotaId, setMascotaId] = useState<number>(nuevaHistoria?.mascota?.id || mascotas[0]?.id || 0);
+  const [citaId, setCitaId] = useState<number | null>(nuevaHistoria?.citaId ?? null);
   const [diagnostico, setDiagnostico] = useState('');
   const [tratamiento, setTratamiento] = useState('');
   const [observaciones, setObservaciones] = useState('');
 
-  const filteredHistoriales = historiales.filter((h) => {
-    if (selectedPetFilter !== 'todos' && String(h.mascota_id) !== selectedPetFilter) {
-      return false;
-    }
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      return (
-        (h.mascota_nombre && h.mascota_nombre.toLowerCase().includes(q)) ||
-        h.diagnostico.toLowerCase().includes(q) ||
-        h.tratamiento.toLowerCase().includes(q) ||
-        (h.vet_nombre && h.vet_nombre.toLowerCase().includes(q))
-      );
-    }
-    return true;
+  useEffect(() => {
+    if (nuevaHistoria?.mascota && esPersonal) setModalOpen(true);
+  }, [nuevaHistoria]);
+
+  // Citas de la mascota que todavía se pueden cerrar con esta historia.
+  const citasAtendibles = citas.filter(
+    (c) => c.mascota_id === mascotaId && (c.estado === 'Confirmada' || c.estado === 'Pendiente') && !c.tiene_historial
+  );
+  useEffect(() => {
+    if (citaId && !citasAtendibles.some((c) => c.id === citaId)) setCitaId(null);
+  }, [mascotaId]);
+
+  const filtrados = historiales.filter((h) => {
+    if (filtroMascota !== 'todos' && String(h.mascota_id) !== filtroMascota) return false;
+    if (!search.trim()) return true;
+    const q = search.toLowerCase();
+    return [h.mascota_nombre, h.diagnostico, h.tratamiento, h.vet_nombre].some((t) => (t || '').toLowerCase().includes(q));
   });
+
+  const abrirFormulario = () => {
+    setErrorMsg(null);
+    setModalOpen(true);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMsg(null);
     if (!diagnostico.trim() || !tratamiento.trim()) {
-      alert('Por favor ingresa tanto el diagnóstico como el tratamiento.');
+      setErrorMsg('Escribe el diagnóstico y el tratamiento.');
       return;
     }
-
     try {
       setIsSubmitting(true);
       await onCreateHistorial({
         mascota_id: Number(mascotaId),
-        cita_id: citaId ? Number(citaId) : null,
-        // Firma el veterinario de la sesión; si no lo es (admin), el backend toma el de la cita.
+        cita_id: citaId,
+        // Firma el veterinario de la sesión; si es un administrador, el backend toma el de la cita.
         veterinario_id: currentUser.tipo === 'veterinario' ? currentUser.id : undefined,
         diagnostico: diagnostico.trim(),
         tratamiento: tratamiento.trim(),
         observaciones: observaciones.trim()
       });
-
+      avisar(citaId ? 'Historia registrada y cita completada.' : 'Historia registrada.');
       setModalOpen(false);
+      setCitaId(null);
       setDiagnostico('');
       setTratamiento('');
       setObservaciones('');
     } catch (err: any) {
-      alert(err.message || 'Error al guardar el historial médico.');
+      setErrorMsg(err.message || 'No se pudo guardar la historia.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-            Historiales Clínicos Digitales
-          </h1>
-          <p className="text-sm text-slate-500 mt-1">
-            Registro de evoluciones médicas, prescripciones farmacológicas y exámenes de laboratorio.
-          </p>
-        </div>
-
-        {(currentUser.tipo === 'veterinario' || currentUser.tipo === 'administrador') && (
-          <button
-            id="btn-nuevo-historial"
-            onClick={() => setModalOpen(true)}
-            className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm shadow-sm flex items-center justify-center gap-2 transition-colors self-start sm:self-auto"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Nueva Entrada Médica</span>
+    <div className="space-y-6">
+      <Encabezado
+        titulo={esPersonal ? 'Historias clínicas' : 'Historial de mis mascotas'}
+        descripcion={esPersonal ? 'Diagnósticos, tratamientos y recomendaciones de cada consulta.' : 'Lo que el veterinario registró en cada consulta.'}
+      >
+        {esPersonal && (
+          <button id="btn-nuevo-historial" onClick={abrirFormulario} className="mp-btn mp-btn--primario">
+            <ClipboardPlus className="w-4 h-4" />
+            Nueva historia
           </button>
         )}
-      </div>
+      </Encabezado>
 
-      {/* Filter and Search Bar */}
-      <div className="flex flex-col sm:flex-row items-center gap-3">
-        <div className="relative w-full sm:w-80">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="mp-buscador w-full sm:w-80">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" aria-hidden />
+          <label htmlFor="input-search-historiales" className="sr-only">Buscar en el historial</label>
           <input
-            type="text"
+            type="search"
             id="input-search-historiales"
-            placeholder="Buscar por diagnóstico o medicamento..."
+            placeholder="Diagnóstico, tratamiento o veterinario"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+            className="mp-campo"
           />
         </div>
-
         <div className="w-full sm:w-64">
-          <select
-            id="select-filter-mascota-historial"
-            value={selectedPetFilter}
-            onChange={(e) => setSelectedPetFilter(e.target.value)}
-            className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-          >
-            <option value="todos">Todos los pacientes</option>
+          <label htmlFor="select-filter-mascota-historial" className="sr-only">Mascota</label>
+          <select id="select-filter-mascota-historial" value={filtroMascota} onChange={(e) => setFiltroMascota(e.target.value)} className="mp-campo">
+            <option value="todos">Todas las mascotas</option>
             {mascotas.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.nombre} ({m.especie_nombre})
-              </option>
+              <option key={m.id} value={m.id}>{m.nombre} ({m.especie_nombre})</option>
             ))}
           </select>
         </div>
       </div>
 
-      {/* Historial Cards List */}
-      {filteredHistoriales.length === 0 ? (
-        <div className="bg-white rounded-3xl border border-dashed border-slate-300 p-16 text-center">
-          <ClipboardList className="w-12 h-12 text-slate-400 mx-auto mb-3" />
-          <h3 className="text-base font-bold text-slate-800">No hay registros clínicos disponibles</h3>
-          <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1">
-            Los historiales médicos se generan cuando un médico veterinario atiende una cita o ingresa una consulta.
-          </p>
-        </div>
+      {filtrados.length === 0 ? (
+        <Vacio
+          icono={ClipboardList}
+          titulo={historiales.length === 0 ? 'Todavía no hay historias clínicas' : 'Ninguna historia coincide'}
+          texto={historiales.length === 0 ? 'Se registran al atender una cita o desde aquí mismo.' : 'Prueba con otra búsqueda o con todas las mascotas.'}
+        />
       ) : (
-        <div className="space-y-4">
-          {filteredHistoriales.map((h) => (
-            <div 
-              key={h.id}
-              className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs hover:shadow-md transition-shadow"
-            >
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4 pb-3 border-b border-slate-100">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
-                    🐾
-                  </div>
-                  <div>
-                    <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                      {h.mascota_nombre || 'Paciente'}
-                      <span className="text-xs font-normal text-slate-500">({h.mascota_raza || 'Mascota'})</span>
-                    </h3>
-                    <p className="text-xs text-slate-500 flex items-center gap-1">
-                      <Stethoscope className="w-3.5 h-3.5 text-blue-500" />
-                      Médico: {h.vet_nombre} {h.vet_apellidos}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500 bg-slate-50 px-3 py-1.5 rounded-lg self-start sm:self-auto">
-                  <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                  <span>{formatearFechaHora(h.fecha_creacion)}</span>
-                </div>
+        <ol className="space-y-4">
+          {filtrados.map((h) => (
+            <li key={h.id} className="mp-papel-blanco overflow-hidden">
+              <div className="bg-[#1d4f60] text-white px-5 py-3 flex flex-wrap items-center justify-between gap-2">
+                <h2 className="font-titulo text-lg font-semibold">
+                  {h.mascota_nombre}
+                  {h.mascota_raza && <span className="ml-2 text-sm font-normal text-white/70">{h.mascota_raza}</span>}
+                </h2>
+                <p className="text-sm text-white/80 flex items-center gap-2">
+                  <Stethoscope className="w-4 h-4 text-[#9dddf5]" />
+                  {h.vet_nombre} · {formatearFechaHora(h.fecha_creacion)}
+                </p>
               </div>
-
-              <div className="grid md:grid-cols-2 gap-4 text-xs">
-                {/* Diagnóstico */}
-                <div className="bg-slate-50 p-4 rounded-xl space-y-1.5">
-                  <div className="font-bold text-slate-900 flex items-center gap-1.5 text-xs uppercase tracking-wider">
-                    <FileText className="w-3.5 h-3.5 text-blue-600" />
-                    <span>Diagnóstico Clínico</span>
-                  </div>
-                  <p className="text-slate-700 leading-relaxed font-medium">
-                    {h.diagnostico}
-                  </p>
+              <div className="p-5 grid md:grid-cols-2 gap-4 text-sm">
+                <div>
+                  <h3 className="font-semibold text-[#156a8e] mb-1">Diagnóstico</h3>
+                  <p className="text-slate-700 leading-relaxed">{h.diagnostico}</p>
                 </div>
-
-                {/* Tratamiento */}
-                <div className="bg-emerald-50/50 border border-emerald-100/80 p-4 rounded-xl space-y-1.5">
-                  <div className="font-bold text-emerald-900 flex items-center gap-1.5 text-xs uppercase tracking-wider">
-                    <Pill className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>Tratamiento & Prescripción</span>
-                  </div>
-                  <p className="text-emerald-950 leading-relaxed font-medium">
-                    {h.tratamiento}
-                  </p>
+                <div>
+                  <h3 className="font-semibold text-[#156a8e] mb-1">Tratamiento</h3>
+                  <p className="text-slate-700 leading-relaxed">{h.tratamiento}</p>
                 </div>
+                {h.observaciones && (
+                  <div className="md:col-span-2 bg-[#fff5e6] border-l-4 border-[#ff9f43] rounded-r-lg p-3">
+                    <h3 className="font-semibold mb-0.5">Recomendaciones</h3>
+                    <p className="text-slate-700">{h.observaciones}</p>
+                  </div>
+                )}
+                {h.cita_fecha && (
+                  <p className="md:col-span-2 text-xs text-slate-500">Cita del {formatearFechaHora(h.cita_fecha)}</p>
+                )}
               </div>
-
-              {h.observaciones && (
-                <div className="mt-3 pt-3 border-t border-slate-100 text-xs text-slate-600">
-                  <span className="font-bold text-slate-800">Observaciones y Cuidados en Casa:</span>{' '}
-                  {h.observaciones}
-                </div>
-              )}
-            </div>
+            </li>
           ))}
-        </div>
+        </ol>
       )}
 
-      {/* Modal Registrar Nuevo Historial */}
       {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden my-8">
-            <div className="bg-blue-600 text-white px-6 py-4 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <FileText className="w-5 h-5 text-white" />
-                <h3 className="font-bold text-lg">Registrar Consulta Médica</h3>
-              </div>
-              <button 
-                onClick={() => setModalOpen(false)}
-                className="text-blue-200 hover:text-white p-1 rounded-lg"
-              >
-                <X className="w-5 h-5" />
-              </button>
+        <Modal titulo="Nueva historia clínica" icono={<ClipboardPlus className="w-5 h-5 text-[#ff9f43]" />} onCerrar={() => setModalOpen(false)}>
+          <form onSubmit={handleSubmit} className="p-6 space-y-4">
+            <ErrorFormulario texto={errorMsg} />
+            <div>
+              <label htmlFor="select-historial-mascota" className="mp-etiqueta">Mascota</label>
+              <select id="select-historial-mascota" value={mascotaId} onChange={(e) => setMascotaId(Number(e.target.value))} className="mp-campo">
+                {mascotas.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.nombre} - {m.especie_nombre} ({m.raza || 'Mestizo'})
+                  </option>
+                ))}
+              </select>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-6 space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Paciente (Mascota) *
-                </label>
-                <select
-                  id="select-historial-mascota"
-                  value={mascotaId}
-                  onChange={(e) => setMascotaId(Number(e.target.value))}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                >
-                  {mascotas.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.nombre} - {m.especie_nombre} ({m.raza || 'Mestizo'})
-                    </option>
-                  ))}
-                </select>
-              </div>
+            <div>
+              <label htmlFor="select-historial-cita" className="mp-etiqueta">Cita que se atiende</label>
+              <select
+                id="select-historial-cita"
+                value={citaId ?? ''}
+                onChange={(e) => setCitaId(e.target.value ? Number(e.target.value) : null)}
+                className="mp-campo"
+              >
+                <option value="">Sin cita (consulta fuera de agenda)</option>
+                {citasAtendibles.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {formatearFechaHora(c.fecha_hora)} · {c.servicio_nombre}
+                  </option>
+                ))}
+              </select>
+              <p className="mp-ayuda">Con una cita elegida, la cita queda completada al guardar.</p>
+            </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Diagnóstico Clínico *
-                </label>
-                <textarea
-                  id="textarea-historial-diagnostico"
-                  rows={3}
-                  placeholder="Descripción de los hallazgos físicos, temperatura, constantes vitales y diagnóstico definitivo o presuntivo..."
-                  value={diagnostico}
-                  onChange={(e) => setDiagnostico(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                  required
-                />
-              </div>
+            <div>
+              <label htmlFor="textarea-historial-diagnostico" className="mp-etiqueta">Diagnóstico</label>
+              <textarea
+                id="textarea-historial-diagnostico"
+                rows={3}
+                placeholder="Hallazgos, constantes y diagnóstico"
+                value={diagnostico}
+                onChange={(e) => setDiagnostico(e.target.value)}
+                className="mp-campo resize-none"
+                required
+              />
+            </div>
+            <div>
+              <label htmlFor="textarea-historial-tratamiento" className="mp-etiqueta">Tratamiento</label>
+              <textarea
+                id="textarea-historial-tratamiento"
+                rows={3}
+                placeholder="Medicamento, dosis, vía y duración"
+                value={tratamiento}
+                onChange={(e) => setTratamiento(e.target.value)}
+                className="mp-campo resize-none"
+                required
+              />
+            </div>
+            <div>
+              <label htmlFor="textarea-historial-observaciones" className="mp-etiqueta">Recomendaciones para el tutor (opcional)</label>
+              <textarea
+                id="textarea-historial-observaciones"
+                rows={2}
+                placeholder="Control en 10 días, dieta blanda…"
+                value={observaciones}
+                onChange={(e) => setObservaciones(e.target.value)}
+                className="mp-campo resize-none"
+              />
+            </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Tratamiento y Medicación Prescrita *
-                </label>
-                <textarea
-                  id="textarea-historial-tratamiento"
-                  rows={3}
-                  placeholder="Medicamentos, dosis (mg/kg), vía de administración y duración del tratamiento..."
-                  value={tratamiento}
-                  onChange={(e) => setTratamiento(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Recomendaciones para el Tutor (Opcional)
-                </label>
-                <textarea
-                  id="textarea-historial-observaciones"
-                  rows={2}
-                  placeholder="Control en X días, dieta blanda, reposo absoluto, signos de alarma..."
-                  value={observaciones}
-                  onChange={(e) => setObservaciones(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setModalOpen(false)}
-                  className="px-4 py-2 rounded-xl border border-slate-300 text-slate-700 text-sm font-semibold hover:bg-slate-50"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  id="btn-submit-historial"
-                  disabled={isSubmitting}
-                  className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold shadow-md transition-colors disabled:opacity-50"
-                >
-                  {isSubmitting ? 'Guardando...' : 'Guardar en Ficha Clínica'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+            <PieModal>
+              <button type="button" onClick={() => setModalOpen(false)} className="mp-btn mp-btn--borde">Cancelar</button>
+              <button type="submit" id="btn-submit-historial" disabled={isSubmitting} className="mp-btn mp-btn--primario">
+                {isSubmitting ? 'Guardando…' : 'Guardar historia'}
+              </button>
+            </PieModal>
+          </form>
+        </Modal>
       )}
     </div>
   );

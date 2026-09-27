@@ -116,6 +116,7 @@ export interface Cita {
   vet_apellidos: string;
   vet_especialidad?: string;
   servicio_nombre: string;
+  tiene_historial?: boolean;
   servicio_precio?: number;
   servicio_duracion_min: number;
 }

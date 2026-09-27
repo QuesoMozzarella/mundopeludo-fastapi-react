@@ -9,17 +9,9 @@ import {
   fetchDisponibilidades,
   updateServicio
 } from '../api';
-import {
-  AlertCircle,
-  CalendarClock,
-  Clock,
-  Edit3,
-  Plus,
-  Power,
-  Stethoscope,
-  Trash2,
-  X
-} from 'lucide-react';
+import { Encabezado, ErrorFormulario, Modal, PieModal, useInterfaz } from './ui';
+import { formatearPrecio } from '../formato';
+import { CalendarClock, Clock, Pencil, Plus, Power, Stethoscope, Trash2, X } from 'lucide-react';
 
 const DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 
@@ -40,26 +32,8 @@ const FORMULARIO_VACIO: ServicioDatos = {
   veterinarios_ids: []
 };
 
-const estiloCampo =
-  'w-full px-3 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white';
-const estiloEtiqueta = 'block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5';
-
 /** "09:00:00" -> "09:00" */
 const hhmm = (hora: string) => hora.slice(0, 5);
-
-function Aviso({ texto, onCerrar }: { texto: string; onCerrar?: () => void }) {
-  return (
-    <div role="alert" className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-start gap-2">
-      <AlertCircle className="w-4 h-4 shrink-0 mt-px" />
-      <span className="flex-1">{texto}</span>
-      {onCerrar && (
-        <button type="button" onClick={onCerrar} className="text-red-400 hover:text-red-700">
-          <X className="w-3.5 h-3.5" />
-        </button>
-      )}
-    </div>
-  );
-}
 
 export const ServiciosView: React.FC<ServiciosViewProps> = ({
   servicios,
@@ -68,6 +42,7 @@ export const ServiciosView: React.FC<ServiciosViewProps> = ({
   onRecargarServicios
 }) => {
   const esAdmin = currentUser.tipo === 'administrador';
+  const { avisar, confirmar } = useInterfaz();
 
   // ------------------------------ servicios ------------------------------
   const [editando, setEditando] = useState<Servicio | 'nuevo' | null>(null);
@@ -128,6 +103,7 @@ export const ServiciosView: React.FC<ServiciosViewProps> = ({
       if (editando === 'nuevo') await createServicio(datos);
       else if (editando) await updateServicio(editando.id, datos);
       await onRecargarServicios();
+      avisar(editando === 'nuevo' ? `Servicio «${datos.nombre}» creado.` : 'Cambios guardados.');
       setEditando(null);
     } catch (err: any) {
       setErrorModal(err.message || 'No se pudo guardar el servicio.');
@@ -141,17 +117,25 @@ export const ServiciosView: React.FC<ServiciosViewProps> = ({
     try {
       await updateServicio(s.id, { activo: !s.activo });
       await onRecargarServicios();
+      avisar(s.activo ? `«${s.nombre}» desactivado: ya no se puede agendar.` : `«${s.nombre}» activado.`);
     } catch (err: any) {
       setErrorServicios(err.message || 'No se pudo cambiar el estado del servicio.');
     }
   };
 
   const eliminarServicio = async (s: Servicio) => {
-    if (!confirm(`¿Eliminar el servicio "${s.nombre}"?`)) return;
+    const ok = await confirmar({
+      titulo: 'Eliminar el servicio',
+      mensaje: `«${s.nombre}» se eliminará. Si ya tiene citas no se podrá: en ese caso, desactívalo.`,
+      confirmar: 'Eliminar servicio',
+      peligro: true
+    });
+    if (!ok) return;
     setErrorServicios(null);
     try {
       await deleteServicio(s.id);
       await onRecargarServicios();
+      avisar(`Servicio «${s.nombre}» eliminado.`);
     } catch (err: any) {
       // Con citas asociadas la API lo impide: se sugiere desactivarlo.
       setErrorServicios(
@@ -227,97 +211,95 @@ export const ServiciosView: React.FC<ServiciosViewProps> = ({
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-          Servicios y Horarios
-        </h1>
-        <p className="text-sm text-slate-500 mt-1">
-          Precio y duración de cada servicio, quién lo presta y en qué horario atiende cada veterinario.
-          La duración y el horario deciden qué horas se ofrecen al agendar.
-        </p>
-      </div>
+      <Encabezado
+        titulo="Servicios y horarios"
+        descripcion="Precio y duración de cada servicio, quién lo presta y el horario de cada veterinario. La duración y el horario deciden qué horas se ofrecen al pedir una cita."
+      />
 
       {/* ------------------------------ Servicios ------------------------------ */}
       <section className="space-y-4">
         <div className="flex items-center justify-between gap-4">
-          <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-            <Stethoscope className="w-5 h-5 text-amber-600" />
+          <h2 className="font-titulo text-xl font-semibold flex items-center gap-2">
+            <Stethoscope className="w-5 h-5 text-[#9dddf5]" />
             Servicios
           </h2>
           {esAdmin && (
             <button
               id="btn-nuevo-servicio"
               onClick={abrirNuevo}
-              className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-sm shadow-sm flex items-center gap-2"
+              className="mp-btn mp-btn--primario"
             >
               <Plus className="w-4 h-4" />
-              <span>Nuevo Servicio</span>
+              Nuevo servicio
             </button>
           )}
         </div>
 
-        {errorServicios && <Aviso texto={errorServicios} onCerrar={() => setErrorServicios(null)} />}
+        <ErrorFormulario texto={errorServicios} />
 
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-slate-700">
-              <thead className="bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+        <div className="mp-papel overflow-hidden">
+          <div className="mp-desplazable">
+            <table className="mp-tabla">
+              <thead>
                 <tr>
-                  <th className="px-4 py-3">Servicio</th>
-                  <th className="px-4 py-3">Precio</th>
-                  <th className="px-4 py-3">Duración</th>
-                  <th className="px-4 py-3">Lo prestan</th>
-                  <th className="px-4 py-3">Estado</th>
-                  {esAdmin && <th className="px-4 py-3 text-right">Acciones</th>}
+                  <th>Servicio</th>
+                  <th>Precio</th>
+                  <th>Duración</th>
+                  <th>Lo prestan</th>
+                  <th>Estado</th>
+                  {esAdmin && <th className="text-right"><span className="sr-only">Acciones</span></th>}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody>
                 {servicios.map((s) => (
-                  <tr key={s.id} id={`fila-servicio-${s.id}`} className="hover:bg-slate-50/70">
-                    <td className="px-4 py-3.5">
-                      <div className="font-bold text-slate-900">{s.nombre}</div>
-                      {s.descripcion && <div className="text-[11px] text-slate-400">{s.descripcion}</div>}
+                  <tr key={s.id} id={`fila-servicio-${s.id}`}>
+                    <td>
+                      <div className="font-semibold">{s.nombre}</div>
+                      {s.descripcion && <div className="text-xs text-slate-500">{s.descripcion}</div>}
                     </td>
-                    <td className="px-4 py-3.5 font-bold text-slate-900">
-                      {s.precio != null ? `$${s.precio.toLocaleString('es-CL')}` : <span className="font-normal text-slate-400">Sin precio</span>}
+                    <td className="font-semibold whitespace-nowrap">
+                      {s.precio != null ? formatearPrecio(s.precio) : <span className="font-normal text-slate-500">Sin precio</span>}
                     </td>
-                    <td className="px-4 py-3.5">{s.duracion_min} min</td>
-                    <td className="px-4 py-3.5">
+                    <td>{s.duracion_min} min</td>
+                    <td>
                       {s.veterinarios_ids?.length
                         ? s.veterinarios_ids.map(nombreVet).join(', ')
-                        : <span className="text-slate-400">Cualquier veterinario</span>}
+                        : <span className="text-slate-500">Cualquier veterinario</span>}
                     </td>
-                    <td className="px-4 py-3.5">
+                    <td>
                       {s.activo ? (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">Activo</span>
+                        <span className="mp-pill mp-pill--exito">Activo</span>
                       ) : (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-200 text-slate-600">Inactivo</span>
+                        <span className="mp-pill mp-pill--neutro">Inactivo</span>
                       )}
                     </td>
                     {esAdmin && (
-                      <td className="px-4 py-3.5 text-right">
+                      <td className="text-right">
                         <div className="flex items-center justify-end gap-2">
                           <button
                             id={`btn-editar-servicio-${s.id}`}
                             onClick={() => abrirEdicion(s)}
-                            className="p-1.5 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100"
+                            className="mp-accion"
                             title="Editar servicio"
+                            aria-label={`Editar ${s.nombre}`}
                           >
-                            <Edit3 className="w-4 h-4" />
+                            <Pencil className="w-4 h-4" />
                           </button>
                           <button
                             id={`btn-estado-servicio-${s.id}`}
                             onClick={() => cambiarActivo(s)}
-                            className="p-1.5 rounded-lg text-slate-500 hover:text-amber-700 hover:bg-amber-50"
+                            className="mp-accion mp-accion--neutro"
                             title={s.activo ? 'Desactivar (no se podrá agendar)' : 'Activar'}
+                            aria-label={s.activo ? `Desactivar ${s.nombre}` : `Activar ${s.nombre}`}
                           >
                             <Power className="w-4 h-4" />
                           </button>
                           <button
                             id={`btn-eliminar-servicio-${s.id}`}
                             onClick={() => eliminarServicio(s)}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50"
+                            className="mp-accion mp-accion--peligro"
                             title="Eliminar"
+                            aria-label={`Eliminar ${s.nombre}`}
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -331,15 +313,15 @@ export const ServiciosView: React.FC<ServiciosViewProps> = ({
           </div>
         </div>
         {!esAdmin && (
-          <p className="text-[11px] text-slate-400">Sólo un administrador puede modificar los servicios.</p>
+          <p className="text-sm text-white/75">Sólo un administrador puede modificar los servicios.</p>
         )}
       </section>
 
       {/* ------------------------------ Horarios ------------------------------ */}
       <section className="space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-            <CalendarClock className="w-5 h-5 text-sky-600" />
+          <h2 className="font-titulo text-xl font-semibold flex items-center gap-2">
+            <CalendarClock className="w-5 h-5 text-[#9dddf5]" />
             Horario de atención
           </h2>
           <select
@@ -347,7 +329,7 @@ export const ServiciosView: React.FC<ServiciosViewProps> = ({
             value={vetHorario}
             onChange={(e) => setVetHorario(Number(e.target.value))}
             disabled={!esAdmin}
-            className={`${estiloCampo} sm:w-72 disabled:bg-slate-50`}
+            className={`mp-campo sm:w-72 disabled:bg-slate-50`}
           >
             {(esAdmin ? veterinarios : veterinarios.filter((v) => v.id === currentUser.id)).map((v) => (
               <option key={v.id} value={v.id}>{v.nombre} {v.apellidos}</option>
@@ -358,34 +340,35 @@ export const ServiciosView: React.FC<ServiciosViewProps> = ({
           </select>
         </div>
 
-        {errorHorario && <Aviso texto={errorHorario} onCerrar={() => setErrorHorario(null)} />}
+        <ErrorFormulario texto={errorHorario} />
 
         {franjas !== null && franjas.length === 0 && (
-          <p id="aviso-sin-horario" className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-xl p-3">
+          <p id="aviso-sin-horario" className="mp-aviso mp-aviso--info">
             Sin franjas declaradas: no se le pueden agendar citas hasta que tenga horario.
           </p>
         )}
 
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
           {DIAS.map((nombre, d) => (
-            <div key={d} id={`dia-horario-${d}`} className="bg-white rounded-2xl border border-slate-200 p-3 space-y-2">
-              <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">{nombre}</div>
+            <div key={d} id={`dia-horario-${d}`} className="mp-panel p-3 space-y-2">
+              <div className="text-sm font-semibold">{nombre}</div>
               {franjas === null ? (
-                <div className="text-[11px] text-slate-300">…</div>
+                <div className="text-xs text-white/50">…</div>
               ) : franjasDelDia(d).length === 0 ? (
-                <div className="text-[11px] text-slate-400">No atiende</div>
+                <div className="text-xs text-white/65">No atiende</div>
               ) : (
                 franjasDelDia(d).map((f) => (
-                  <div key={f.id} className="flex items-center justify-between gap-1 text-xs font-semibold text-slate-800 bg-sky-50 rounded-lg px-2 py-1">
+                  <div key={f.id} className="flex items-center justify-between gap-1 text-xs font-semibold text-[#1d4f60] bg-white rounded-lg px-2 py-1">
                     <span className="flex items-center gap-1">
-                      <Clock className="w-3 h-3 text-sky-500" />
+                      <Clock className="w-3 h-3 text-[#1d95c8]" />
                       {hhmm(f.hora_inicio)}–{hhmm(f.hora_fin)}
                     </span>
                     <button
                       id={`btn-quitar-franja-${f.id}`}
                       onClick={() => quitarFranja(f)}
-                      className="text-slate-400 hover:text-red-600"
+                      className="text-slate-400 hover:text-[#dc3545]"
                       title="Quitar franja"
+                      aria-label={`Quitar la franja ${hhmm(f.hora_inicio)}–${hhmm(f.hora_fin)}`}
                     >
                       <X className="w-3.5 h-3.5" />
                     </button>
@@ -396,26 +379,26 @@ export const ServiciosView: React.FC<ServiciosViewProps> = ({
           ))}
         </div>
 
-        <form onSubmit={agregarFranja} className="bg-white rounded-2xl border border-slate-200 p-4 flex flex-col sm:flex-row sm:items-end gap-3">
+        <form onSubmit={agregarFranja} className="mp-papel-blanco p-4 flex flex-col sm:flex-row sm:items-end gap-3">
           <div className="flex-1">
-            <label className={estiloEtiqueta} htmlFor="select-franja-dia">Día</label>
-            <select id="select-franja-dia" value={dia} onChange={(e) => setDia(Number(e.target.value))} className={estiloCampo}>
+            <label className="mp-etiqueta" htmlFor="select-franja-dia">Día</label>
+            <select id="select-franja-dia" value={dia} onChange={(e) => setDia(Number(e.target.value))} className="mp-campo">
               {DIAS.map((nombre, d) => <option key={d} value={d}>{nombre}</option>)}
             </select>
           </div>
           <div>
-            <label className={estiloEtiqueta} htmlFor="input-franja-inicio">Desde</label>
-            <input id="input-franja-inicio" type="time" required value={inicio} onChange={(e) => setInicio(e.target.value)} className={estiloCampo} />
+            <label className="mp-etiqueta" htmlFor="input-franja-inicio">Desde</label>
+            <input id="input-franja-inicio" type="time" required value={inicio} onChange={(e) => setInicio(e.target.value)} className="mp-campo" />
           </div>
           <div>
-            <label className={estiloEtiqueta} htmlFor="input-franja-fin">Hasta</label>
-            <input id="input-franja-fin" type="time" required value={fin} onChange={(e) => setFin(e.target.value)} className={estiloCampo} />
+            <label className="mp-etiqueta" htmlFor="input-franja-fin">Hasta</label>
+            <input id="input-franja-fin" type="time" required value={fin} onChange={(e) => setFin(e.target.value)} className="mp-campo" />
           </div>
           <button
             id="btn-agregar-franja"
             type="submit"
             disabled={agregando || !vetHorario}
-            className="px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-sm font-bold shadow-sm flex items-center justify-center gap-2 disabled:opacity-50"
+            className="mp-btn mp-btn--azul"
           >
             <Plus className="w-4 h-4" />
             {agregando ? 'Añadiendo…' : 'Añadir franja'}
@@ -425,20 +408,17 @@ export const ServiciosView: React.FC<ServiciosViewProps> = ({
 
       {/* ------------------------------ Modal servicio ------------------------------ */}
       {editando && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden my-8">
-            <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between">
-              <h3 className="font-bold text-lg">{editando === 'nuevo' ? 'Nuevo Servicio' : 'Editar Servicio'}</h3>
-              <button onClick={() => setEditando(null)} className="text-slate-400 hover:text-white p-1">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+        <Modal
+          titulo={editando === 'nuevo' ? 'Nuevo servicio' : `Editar ${editando.nombre}`}
+          icono={<Stethoscope className="w-5 h-5 text-[#ff9f43]" />}
+          onCerrar={() => setEditando(null)}
+        >
 
             <form onSubmit={guardarServicio} className="p-6 space-y-4">
-              {errorModal && <Aviso texto={errorModal} />}
+              <ErrorFormulario texto={errorModal} />
 
               <div>
-                <label className={estiloEtiqueta} htmlFor="input-servicio-nombre">Nombre *</label>
+                <label className="mp-etiqueta" htmlFor="input-servicio-nombre">Nombre *</label>
                 <input
                   id="input-servicio-nombre"
                   type="text"
@@ -447,24 +427,24 @@ export const ServiciosView: React.FC<ServiciosViewProps> = ({
                   maxLength={100}
                   value={formulario.nombre}
                   onChange={(e) => setFormulario({ ...formulario, nombre: e.target.value })}
-                  className={estiloCampo}
+                  className="mp-campo"
                 />
               </div>
 
               <div>
-                <label className={estiloEtiqueta} htmlFor="textarea-servicio-descripcion">Descripción</label>
+                <label className="mp-etiqueta" htmlFor="textarea-servicio-descripcion">Descripción</label>
                 <textarea
                   id="textarea-servicio-descripcion"
                   rows={2}
                   value={formulario.descripcion || ''}
                   onChange={(e) => setFormulario({ ...formulario, descripcion: e.target.value })}
-                  className={`${estiloCampo} resize-none`}
+                  className={`mp-campo resize-none`}
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className={estiloEtiqueta} htmlFor="input-servicio-precio">Precio ($ CLP)</label>
+                  <label className="mp-etiqueta" htmlFor="input-servicio-precio">Precio ($ CLP)</label>
                   <input
                     id="input-servicio-precio"
                     type="number"
@@ -472,11 +452,11 @@ export const ServiciosView: React.FC<ServiciosViewProps> = ({
                     placeholder="Sin precio"
                     value={precioTexto}
                     onChange={(e) => setPrecioTexto(e.target.value)}
-                    className={estiloCampo}
+                    className="mp-campo"
                   />
                 </div>
                 <div>
-                  <label className={estiloEtiqueta} htmlFor="input-servicio-duracion">Duración (min) *</label>
+                  <label className="mp-etiqueta" htmlFor="input-servicio-duracion">Duración (min) *</label>
                   <input
                     id="input-servicio-duracion"
                     type="number"
@@ -486,14 +466,14 @@ export const ServiciosView: React.FC<ServiciosViewProps> = ({
                     step="5"
                     value={formulario.duracion_min}
                     onChange={(e) => setFormulario({ ...formulario, duracion_min: Number(e.target.value) })}
-                    className={estiloCampo}
+                    className="mp-campo"
                   />
                 </div>
               </div>
 
               <fieldset>
-                <legend className={estiloEtiqueta}>Lo prestan</legend>
-                <p className="text-[11px] text-slate-400 mb-2">Si no marcas ninguno, lo puede prestar cualquier veterinario.</p>
+                <legend className="mp-etiqueta">Lo prestan</legend>
+                <p className="mp-ayuda mt-0 mb-2">Si no marcas ninguno, lo puede prestar cualquier veterinario.</p>
                 <div className="grid grid-cols-2 gap-2">
                   {veterinarios.map((v) => (
                     <label key={v.id} className="flex items-center gap-2 text-xs text-slate-700">
@@ -502,7 +482,7 @@ export const ServiciosView: React.FC<ServiciosViewProps> = ({
                         type="checkbox"
                         checked={formulario.veterinarios_ids.includes(v.id)}
                         onChange={() => alternarVet(v.id)}
-                        className="rounded border-slate-300 text-amber-600 focus:ring-amber-500"
+                        className="w-4 h-4 accent-[#1d95c8]"
                       />
                       {v.nombre} {v.apellidos}
                     </label>
@@ -510,37 +490,27 @@ export const ServiciosView: React.FC<ServiciosViewProps> = ({
                 </div>
               </fieldset>
 
-              <label className="flex items-center gap-2 text-xs font-semibold text-slate-700">
+              <label className="flex items-center gap-2 text-sm font-medium">
                 <input
                   id="check-servicio-activo"
                   type="checkbox"
                   checked={formulario.activo}
                   onChange={(e) => setFormulario({ ...formulario, activo: e.target.checked })}
-                  className="rounded border-slate-300 text-amber-600 focus:ring-amber-500"
+                  className="w-4 h-4 accent-[#1d95c8]"
                 />
                 Activo (se puede agendar)
               </label>
 
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setEditando(null)}
-                  className="px-4 py-2 rounded-xl border border-slate-300 text-slate-700 text-sm font-semibold hover:bg-slate-50"
-                >
+              <PieModal>
+                <button type="button" onClick={() => setEditando(null)} className="mp-btn mp-btn--borde">
                   Cancelar
                 </button>
-                <button
-                  id="btn-guardar-servicio"
-                  type="submit"
-                  disabled={guardando}
-                  className="px-5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-sm font-bold shadow-md disabled:opacity-50"
-                >
-                  {guardando ? 'Guardando...' : 'Guardar'}
+                <button id="btn-guardar-servicio" type="submit" disabled={guardando} className="mp-btn mp-btn--primario">
+                  {guardando ? 'Guardando…' : 'Guardar servicio'}
                 </button>
-              </div>
+              </PieModal>
             </form>
-          </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

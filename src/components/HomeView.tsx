@@ -1,19 +1,9 @@
 import React from 'react';
 import { Servicio, Mascota, Producto, DashboardStats } from '../types';
-import { 
-  Calendar, 
-  Heart, 
-  ShoppingBag, 
-  Shield, 
-  Clock, 
-  Phone, 
-  MapPin, 
-  Award, 
-  CheckCircle2, 
-  ArrowRight,
-  Sparkles,
-  Stethoscope
-} from 'lucide-react';
+import { CLINICA, enlaceTelefono, hayContacto } from '../clinica';
+import { formatearPrecio } from '../formato';
+import { FotoMascota, ImagenProducto, useInterfaz } from './ui';
+import { CalendarPlus, Clock, HeartHandshake, Mail, MapPin, Phone, Plus, ShoppingBag, Siren, Stethoscope } from 'lucide-react';
 
 interface HomeViewProps {
   onNavigate: (tab: string, context?: any) => void;
@@ -24,404 +14,205 @@ interface HomeViewProps {
   onAddToCart: (producto: Producto) => void;
 }
 
-export const HomeView: React.FC<HomeViewProps> = ({
-  onNavigate,
-  servicios,
-  mascotasAdopcion,
-  productos,
-  stats,
-  onAddToCart
-}) => {
+// Fotos de servicio que traía el proyecto Django (public/img).
+function fotoServicio(nombre: string): string | null {
+  const n = nombre.toLowerCase();
+  if (n.includes('consulta')) return '/img/servicio-general.jpg';
+  if (n.includes('vacun')) return '/img/servicio-vacunacion.jpg';
+  if (n.includes('cirug')) return '/img/servicio-cirugua.jpg';
+  if (n.includes('peluq') || n.includes('estétic') || n.includes('baño')) return '/img/servicio-peluqueria.jpg';
+  return null;
+}
+
+function Seccion({ id, titulo, texto, accion, children }: {
+  id?: string;
+  titulo: string;
+  texto?: string;
+  accion?: React.ReactNode;
+  children: React.ReactNode;
+}) {
   return (
-    <div className="space-y-16 pb-16">
-      {/* Hero Section (Legacy MundoPeludo Blue #1d95c8) */}
-      <section className="relative overflow-hidden rounded-3xl bg-[#1d95c8] text-white shadow-xl">
-        <div className="absolute inset-0 z-0 opacity-15 pointer-events-none">
-          <div className="absolute top-0 right-0 w-96 h-96 bg-white/20 rounded-full blur-3xl" />
-          <div className="absolute bottom-0 left-0 w-96 h-96 bg-[#1d4f60]/30 rounded-full blur-3xl" />
+    <section id={id} className="space-y-5 scroll-mt-28">
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
+        <div className="space-y-1">
+          <h2 className="font-titulo text-2xl sm:text-3xl font-semibold">{titulo}</h2>
+          {texto && <p className="mp-descripcion">{texto}</p>}
         </div>
+        {accion}
+      </div>
+      {children}
+    </section>
+  );
+}
 
-        <div className="relative z-10 max-w-7xl mx-auto px-6 py-12 sm:px-12 sm:py-16 grid lg:grid-cols-12 gap-8 items-center">
-          <div className="lg:col-span-7 space-y-6">
-            <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-white/20 backdrop-blur-xs border border-white/30 text-white text-xs font-bold tracking-wide uppercase">
-              <Sparkles className="w-3.5 h-3.5 text-[#ff9f43]" />
-              <span>Te ayudamos a cuidar a tu mascota</span>
-            </div>
+export const HomeView: React.FC<HomeViewProps> = ({ onNavigate, servicios, mascotasAdopcion, productos, onAddToCart }) => {
+  const { avisar } = useInterfaz();
+  const destacados = productos.filter((p) => p.stock > 0).slice(0, 4);
+  const telefono = enlaceTelefono();
 
-            <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight text-white leading-tight">
-              Bienvenido a <span className="text-[#fff5e6] drop-shadow-sm">Mundo Peludo</span>
-            </h1>
+  const verServicios = () => document.getElementById('servicios')?.scrollIntoView({ behavior: 'smooth' });
 
-            <p className="text-base sm:text-lg text-sky-100 max-w-2xl leading-relaxed">
-              Tu clínica veterinaria de confianza. Ofrecemos atención médica personalizada,
-              quirófano equipado, agenda digital de citas, adopciones responsables y farmacia completa.
-            </p>
-
-            <div className="flex flex-wrap items-center gap-3 pt-2">
-              <button
-                id="btn-hero-agendar"
-                onClick={() => onNavigate('citas')}
-                className="px-6 py-3.5 rounded-xl bg-[#ff9f43] hover:bg-[#f08e30] text-white font-bold text-sm sm:text-base shadow-lg shadow-black/10 transition-all flex items-center gap-2 hover:scale-[1.02] active:scale-95"
-              >
-                <Calendar className="w-5 h-5 text-white" />
-                <span>Agendar Cita Médica</span>
-              </button>
-
-              <button
-                id="btn-hero-servicios"
-                onClick={() => onNavigate('citas')}
-                className="px-6 py-3.5 rounded-xl bg-white text-[#156a8e] hover:bg-sky-50 font-bold text-sm sm:text-base shadow-sm transition-all flex items-center gap-2"
-              >
-                <Stethoscope className="w-5 h-5 text-[#1d95c8]" />
-                <span>Nuestros Servicios</span>
-              </button>
-
-              <button
-                id="btn-hero-adopciones"
-                onClick={() => onNavigate('adopciones')}
-                className="px-6 py-3.5 rounded-xl bg-white/15 hover:bg-white/25 text-white font-semibold text-sm sm:text-base backdrop-blur-xs border border-white/20 transition-all flex items-center gap-2"
-              >
-                <Heart className="w-5 h-5 text-pink-200" />
-                <span>Adopciones</span>
-              </button>
-            </div>
+  return (
+    <div className="space-y-16 pb-8">
+      {/* Portada: el logo del Django sobre el azul de la clínica */}
+      <section className="grid lg:grid-cols-12 gap-10 items-center pt-4">
+        <div className="lg:col-span-7 space-y-6">
+          <h1 className="font-titulo text-4xl sm:text-6xl font-bold leading-[1.05]">Bienvenido a {CLINICA.nombre}</h1>
+          <p className="text-lg text-white/85 max-w-xl leading-relaxed">
+            Consultas, vacunación y cirugía para tu mascota. Pide la cita en línea con las horas libres de cada
+            veterinario, adopta a un rescatado o compra su alimento y sus medicamentos.
+          </p>
+          <div className="flex flex-wrap gap-3">
+            <button id="btn-hero-agendar" onClick={() => onNavigate('citas')} className="mp-btn mp-btn--primario text-base px-6 py-3">
+              <CalendarPlus className="w-5 h-5" />
+              Pedir una cita
+            </button>
+            <button id="btn-hero-servicios" onClick={verServicios} className="mp-btn mp-btn--fantasma text-base px-6 py-3">
+              <Stethoscope className="w-5 h-5" />
+              Ver servicios y precios
+            </button>
           </div>
-
-          <div className="lg:col-span-5 flex justify-center">
-            <div className="relative">
-              <div className="w-64 h-64 sm:w-80 sm:h-80 rounded-3xl bg-white/10 p-4 backdrop-blur-xs border border-white/20 shadow-2xl flex items-center justify-center">
-                <img 
-                  src="/img/logo.jpg" 
-                  alt="Mundo Peludo Clínica" 
-                  className="w-full h-full object-cover rounded-2xl shadow-md"
-                  onError={(e) => {
-                    // Fallback to cat or pet image if needed
-                    (e.currentTarget as HTMLImageElement).src = '/img/cuidado-mascota.jpg';
-                  }}
-                />
-              </div>
-              <div className="absolute -bottom-4 -right-4 bg-white text-[#156a8e] px-4 py-2 rounded-2xl shadow-xl border border-sky-100 flex items-center gap-2 font-bold text-xs sm:text-sm">
-                <span className="w-3 h-3 rounded-full bg-[#5dca88] animate-ping" />
-                <span>Atención y Emergencias 24/7</span>
-              </div>
-            </div>
+        </div>
+        <div className="lg:col-span-5 flex justify-center">
+          <div className="w-64 h-64 sm:w-80 sm:h-80 rounded-full bg-white p-5 shadow-[0_20px_50px_rgba(29,79,96,0.35)] ring-8 ring-white/15">
+            <img src="/img/logo.jpg" alt={`Logo de ${CLINICA.nombre}`} className="w-full h-full object-contain rounded-full" />
           </div>
         </div>
       </section>
 
-      {/* Sección: Cuidado Profesional para tu Mascota (From Legacy index.html) */}
-      <section className="bg-white rounded-3xl p-8 sm:p-12 border border-sky-100 shadow-sm">
-        <div className="grid lg:grid-cols-12 gap-8 items-center">
-          <div className="lg:col-span-6">
-            <img 
-              src="/img/cuidado-mascota.jpg" 
-              alt="Cuidado profesional veterinario" 
-              className="w-full h-80 sm:h-96 object-cover rounded-2xl shadow-md border-4 border-[#e2f5fc]"
-              onError={(e) => {
-                (e.currentTarget as HTMLImageElement).src = 'https://images.unsplash.com/photo-1576201836106-db1758fd1c97?w=800&auto=format&fit=crop&q=80';
-              }}
-            />
-          </div>
-
-          <div className="lg:col-span-6 space-y-6">
-            <div>
-              <span className="text-xs font-bold uppercase tracking-wider text-[#ff9f43]">Atención Especializada</span>
-              <h2 className="text-2xl sm:text-3xl font-extrabold text-[#156a8e] mt-1">
-                Cuidado Profesional para tu Mascota
-              </h2>
-              <p className="text-slate-600 mt-2 text-base leading-relaxed">
-                Entendemos que tu mascota es parte esencial de tu familia. Por eso brindamos atención
-                veterinaria de la más alta calidad con calidez humana y tecnología de punta.
-              </p>
-            </div>
-
-            <div className="space-y-4">
-              <div className="flex items-start gap-4">
-                <div className="w-11 h-11 rounded-xl bg-[#1d95c8] text-white flex items-center justify-center shrink-0 shadow-sm shadow-[#1d95c8]/30">
-                  <Award className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-slate-800 text-base">Atención Personalizada</h3>
-                  <p className="text-sm text-slate-600">Cada paciente recibe un diagnóstico y tratamiento adaptado a su edad y especie.</p>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-4">
-                <div className="w-11 h-11 rounded-xl bg-[#1d95c8] text-white flex items-center justify-center shrink-0 shadow-sm shadow-[#1d95c8]/30">
-                  <Stethoscope className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-slate-800 text-base">Equipo Médico Calificado</h3>
-                  <p className="text-sm text-slate-600">Profesionales certificados con amplia trayectoria en cirugías y medicina interna.</p>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-4">
-                <div className="w-11 h-11 rounded-xl bg-[#5dca88] text-white flex items-center justify-center shrink-0 shadow-sm shadow-[#5dca88]/30">
-                  <Heart className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-slate-800 text-base">Amor por los Animales</h3>
-                  <p className="text-sm text-slate-600">Nos apasiona el bienestar animal y se nota en la dedicación de cada consulta.</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Sección: Nuestro Impacto (From Legacy index.html) */}
-      <section className="bg-[#f7fbfe] rounded-3xl p-8 sm:p-12 border border-[#9dddf5]/50 shadow-sm">
-        <div className="grid lg:grid-cols-12 gap-8 items-center">
-          <div className="lg:col-span-7 space-y-6">
-            <div>
-              <span className="text-xs font-bold uppercase tracking-wider text-[#1d95c8]">Confianza Comprobada</span>
-              <h2 className="text-2xl sm:text-3xl font-extrabold text-[#156a8e] mt-1">
-                Nuestro Impacto
-              </h2>
-              <p className="text-slate-600 mt-2 text-base leading-relaxed">
-                Nuestra pasión por los animales se traduce en resultados y sonrisas de familias satisfechas.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-white p-5 rounded-2xl border-t-4 border-[#1d95c8] shadow-xs text-center">
-                <div className="text-3xl sm:text-4xl font-extrabold text-[#1d95c8] mb-1">
-                  {stats ? stats.total_mascotas + 1000 : '1000'}+
-                </div>
-                <p className="text-xs font-semibold text-slate-600 uppercase tracking-wider">Mascotas Atendidas</p>
-              </div>
-
-              <div className="bg-white p-5 rounded-2xl border-t-4 border-[#ff9f43] shadow-xs text-center">
-                <div className="text-3xl sm:text-4xl font-extrabold text-[#ff9f43] mb-1">98%</div>
-                <p className="text-xs font-semibold text-slate-600 uppercase tracking-wider">Clientes Satisfechos</p>
-              </div>
-
-              <div className="bg-white p-5 rounded-2xl border-t-4 border-[#5dca88] shadow-xs text-center">
-                <div className="text-3xl sm:text-4xl font-extrabold text-[#5dca88] mb-1">24/7</div>
-                <p className="text-xs font-semibold text-slate-600 uppercase tracking-wider">Urgencias Médicas</p>
-              </div>
-
-              <div className="bg-white p-5 rounded-2xl border-t-4 border-[#1d4f60] shadow-xs text-center">
-                <div className="text-3xl sm:text-4xl font-extrabold text-[#1d4f60] mb-1">5+</div>
-                <p className="text-xs font-semibold text-slate-600 uppercase tracking-wider">Años de Experiencia</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="lg:col-span-5 flex justify-center">
-            <img 
-              src="/img/gato.jpg" 
-              alt="Mascota feliz en Mundo Peludo" 
-              className="w-full max-w-sm h-80 object-cover rounded-2xl shadow-lg border-4 border-white"
-              onError={(e) => {
-                (e.currentTarget as HTMLImageElement).src = 'https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?w=800&auto=format&fit=crop&q=80';
-              }}
-            />
-          </div>
-        </div>
-      </section>
-
-      {/* Servicios Médicos Destacados */}
-      <section className="space-y-6">
-        <div className="flex items-end justify-between">
-          <div>
-            <span className="text-xs font-bold uppercase tracking-wider text-[#1d95c8]">Servicios Médicos</span>
-            <h2 className="text-2xl sm:text-3xl font-extrabold text-[#156a8e]">Especialidades de Nuestra Clínica</h2>
-          </div>
-          <button
-            onClick={() => onNavigate('citas')}
-            className="text-sm font-bold text-[#1d95c8] hover:text-[#156a8e] flex items-center gap-1 group"
-          >
-            <span>Ver todos los servicios</span>
-            <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
-          </button>
-        </div>
-
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {servicios.map((s) => (
-            <div 
-              key={s.id} 
-              className="card-mundo p-6 flex flex-col justify-between"
-            >
-              <div>
-                {(s.duracion_min != null || s.precio != null) && (
-                  <div className="flex items-center justify-between mb-3">
-                    {s.duracion_min != null && (
-                      <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-[#e2f5fc] text-[#156a8e]">
-                        ⏱️ {s.duracion_min} minutos
+      {/* Servicios reales de la API */}
+      {servicios.length > 0 && (
+        <Seccion id="servicios" titulo="Servicios" texto="Duración y precio de cada consulta. Al pedir la cita te mostramos las horas libres.">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {servicios.map((s) => {
+              const foto = fotoServicio(s.nombre);
+              return (
+                <article key={s.id} className="mp-papel-blanco overflow-hidden flex flex-col">
+                  {foto ? (
+                    <img src={foto} alt="" className="w-full h-36 object-cover" />
+                  ) : (
+                    <div className="w-full h-36 bg-[#156a8e] flex items-center justify-center">
+                      <Stethoscope className="w-12 h-12 text-[#9dddf5]" />
+                    </div>
+                  )}
+                  <div className="p-5 flex-1 flex flex-col gap-2">
+                    <h3 className="font-titulo text-lg font-semibold text-[#1d4f60]">{s.nombre}</h3>
+                    {s.descripcion && <p className="text-sm text-slate-600">{s.descripcion}</p>}
+                    <p className="mt-auto pt-2 flex items-center justify-between text-sm">
+                      <span className="flex items-center gap-1.5 text-slate-500">
+                        <Clock className="w-4 h-4" />
+                        {s.duracion_min} min
                       </span>
-                    )}
-                    {s.precio != null && (
-                      <span className="text-base font-extrabold text-[#ff9f43]">
-                        ${s.precio.toLocaleString('es-CL')}
-                      </span>
-                    )}
+                      {s.precio != null && <span className="font-bold text-[#2c3e50]">{formatearPrecio(s.precio)}</span>}
+                    </p>
+                    <button
+                      id={`btn-servicio-agendar-${s.id}`}
+                      onClick={() => onNavigate('citas', { servicioId: s.id })}
+                      className="mp-btn mp-btn--azul mp-btn--sm mt-2"
+                    >
+                      Pedir esta cita
+                    </button>
                   </div>
-                )}
-                <h3 className="text-lg font-bold text-slate-800 mb-2">{s.nombre}</h3>
-                <p className="text-sm text-slate-600 leading-relaxed mb-4">{s.descripcion}</p>
-              </div>
+                </article>
+              );
+            })}
+          </div>
+        </Seccion>
+      )}
 
-              <button
-                id={`btn-servicio-agendar-${s.id}`}
-                onClick={() => onNavigate('citas', { servicioId: s.id })}
-                className="w-full py-2.5 px-4 rounded-xl bg-[#1d95c8] hover:bg-[#156a8e] text-white text-xs font-bold transition-colors flex items-center justify-center gap-1.5 shadow-sm active:scale-95"
-              >
-                <Calendar className="w-3.5 h-3.5" />
-                <span>Agendar este servicio</span>
-              </button>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Adopción Urgente Banner */}
+      {/* Adopción: mascotas reales en adopción */}
       {mascotasAdopcion.length > 0 && (
-        <section className="bg-gradient-to-r from-[#1d95c8] via-[#156a8e] to-[#1d4f60] rounded-3xl p-8 sm:p-10 text-white shadow-lg flex flex-col lg:flex-row items-center justify-between gap-8">
-          <div className="max-w-xl space-y-3">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#5dca88] text-white text-xs font-bold uppercase tracking-wider">
-              <Heart className="w-3.5 h-3.5 text-white" />
-              <span>Adopta con Amor</span>
-            </div>
-            <h2 className="text-2xl sm:text-3xl font-extrabold text-white">
-              {mascotasAdopcion[0].nombre} busca una familia que lo llene de amor
+        <section className="mp-panel p-6 sm:p-8 grid lg:grid-cols-12 gap-8 items-center">
+          <div className="lg:col-span-4 space-y-4">
+            <h2 className="font-titulo text-2xl sm:text-3xl font-semibold">
+              {mascotasAdopcion.length === 1
+                ? `${mascotasAdopcion[0].nombre} busca familia`
+                : `${mascotasAdopcion.length} mascotas buscan familia`}
             </h2>
-            <p className="text-sky-100 text-sm sm:text-base leading-relaxed">
-              {mascotasAdopcion[0].descripcion}
-            </p>
-            <div className="pt-2 flex flex-wrap gap-4">
-              <button
-                id="btn-adoptar-banner"
-                onClick={() => onNavigate('adopciones')}
-                className="px-6 py-3 rounded-xl bg-[#ff9f43] hover:bg-[#f08e30] text-white font-bold text-sm shadow-md transition-all active:scale-95"
-              >
-                Conocer a {mascotasAdopcion[0].nombre} y otros
-              </button>
-            </div>
+            <p className="text-white/85">Rescatadas por la clínica y listas para un hogar. Postula y el equipo revisará tu solicitud.</p>
+            <button id="btn-adoptar-banner" onClick={() => onNavigate('adopciones')} className="mp-btn mp-btn--claro">
+              <HeartHandshake className="w-4 h-4" />
+              Conocerlas
+            </button>
           </div>
-
-          <div className="w-48 h-48 sm:w-64 sm:h-64 rounded-2xl overflow-hidden shadow-2xl border-4 border-white/40 shrink-0 bg-white">
-            <img 
-              src={mascotasAdopcion[0].imagen_url || '/img/default-pet.jpg'} 
-              alt={mascotasAdopcion[0].nombre} 
-              className="w-full h-full object-cover"
-              onError={(e) => {
-                (e.currentTarget as HTMLImageElement).src = '/img/default-pet.jpg';
-              }}
-            />
-          </div>
+          <ul className="lg:col-span-8 grid grid-cols-2 sm:grid-cols-3 gap-4">
+            {mascotasAdopcion.slice(0, 3).map((m) => (
+              <li key={m.id}>
+                <button onClick={() => onNavigate('adopciones')} className="w-full text-left rounded-xl bg-white/10 hover:bg-white/15 border border-white/15 p-2.5 group">
+                  <FotoMascota nombre={m.nombre} imagen={m.imagen_url} especie={m.especie_nombre} className="w-full aspect-[4/3] rounded-lg" tamanoIcono="w-1/3 h-1/3" />
+                  <span className="block mt-2 px-1 font-semibold group-hover:underline underline-offset-2">{m.nombre}</span>
+                  <span className="block px-1 pb-1 text-sm text-white/75">{m.especie_nombre}, {m.edad_anos} {m.edad_anos === 1 ? 'año' : 'años'}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
         </section>
       )}
 
-      {/* Tienda & Farmacia Highlights */}
-      <section className="space-y-6">
-        <div className="flex items-end justify-between">
-          <div>
-            <span className="text-xs font-bold uppercase tracking-wider text-[#1d95c8]">Farmacia y Nutrición</span>
-            <h2 className="text-2xl sm:text-3xl font-extrabold text-[#156a8e]">Productos Populares en la Tienda</h2>
-          </div>
-          <button
-            onClick={() => onNavigate('tienda')}
-            className="text-sm font-bold text-[#1d95c8] hover:text-[#156a8e] flex items-center gap-1 group"
-          >
-            <span>Ir a la tienda</span>
-            <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
-          </button>
-        </div>
-
-        <div className="grid sm:grid-cols-2 md:grid-cols-4 gap-6">
-          {productos.slice(0, 4).map((p) => (
-            <div 
-              key={p.id}
-              className="card-mundo p-4 flex flex-col justify-between"
-            >
-              <div>
-                <div className="w-full h-44 rounded-xl overflow-hidden bg-slate-100 mb-3 relative">
-                  <img 
-                    src={p.imagen_url || '/img/producto-default.jpg'} 
-                    alt={p.nombre} 
-                    className="w-full h-full object-cover"
-                    onError={(e) => {
-                      (e.currentTarget as HTMLImageElement).src = '/img/producto-default.jpg';
+      {/* Tienda */}
+      {destacados.length > 0 && (
+        <Seccion
+          titulo="De la farmacia y la tienda"
+          texto="Alimentos, antiparasitarios y medicamentos con stock en la clínica."
+          accion={
+            <button onClick={() => onNavigate('tienda')} className="mp-btn mp-btn--fantasma mp-btn--sm self-start sm:self-auto">
+              <ShoppingBag className="w-4 h-4" />
+              Ver toda la tienda
+            </button>
+          }
+        >
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            {destacados.map((p) => (
+              <article key={p.id} className="mp-papel-blanco overflow-hidden flex flex-col">
+                <ImagenProducto nombre={p.nombre} imagen={p.imagen_url} categoria={p.categoria} className="w-full h-32 sm:h-40" tamanoIcono="w-12 h-12" />
+                <div className="p-4 flex-1 flex flex-col gap-2">
+                  <h3 className="text-sm sm:text-base font-semibold text-[#1d4f60] leading-snug">{p.nombre}</h3>
+                  <p className="mt-auto flex items-baseline gap-2">
+                    <span className="font-bold text-[#2c3e50]">{formatearPrecio(p.precio_final)}</span>
+                    {p.descuento_porcentaje > 0 && <span className="text-xs text-slate-400 line-through">{formatearPrecio(p.precio)}</span>}
+                  </p>
+                  <button
+                    id={`btn-add-cart-home-${p.id}`}
+                    onClick={() => {
+                      onAddToCart(p);
+                      avisar(`${p.nombre} añadido al carrito.`);
                     }}
-                  />
-                  {p.descuento_porcentaje > 0 && (
-                    <span className="absolute top-2 left-2 bg-[#ff9f43] text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-xs">
-                      -{p.descuento_porcentaje}% OFF
-                    </span>
-                  )}
+                    className="mp-btn mp-btn--primario mp-btn--sm"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Añadir al carrito
+                  </button>
                 </div>
+              </article>
+            ))}
+          </div>
+        </Seccion>
+      )}
 
-                <div className="text-[11px] font-bold text-[#1d95c8] uppercase tracking-wider mb-1">
-                  {p.marca || p.categoria}
-                </div>
-                <h4 className="text-sm font-bold text-slate-800 line-clamp-2 mb-2">{p.nombre}</h4>
-              </div>
-
+      {/* Contacto: sólo lo que esté rellenado en src/clinica.ts */}
+      {hayContacto && (
+        <section className="mp-panel grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          {CLINICA.direccion && (
+            <div className="flex gap-3"><MapPin className="w-5 h-5 text-[#9dddf5] shrink-0" /><div><h2 className="font-semibold">Dónde estamos</h2><p className="text-sm text-white/80">{CLINICA.direccion}</p></div></div>
+          )}
+          {CLINICA.horario && (
+            <div className="flex gap-3"><Clock className="w-5 h-5 text-[#9dddf5] shrink-0" /><div><h2 className="font-semibold">Horario</h2><p className="text-sm text-white/80">{CLINICA.horario}</p></div></div>
+          )}
+          {(CLINICA.telefono || CLINICA.correo) && (
+            <div className="flex gap-3">
+              {CLINICA.telefono ? <Phone className="w-5 h-5 text-[#9dddf5] shrink-0" /> : <Mail className="w-5 h-5 text-[#9dddf5] shrink-0" />}
               <div>
-                <div className="flex items-baseline gap-2 mb-3">
-                  <span className="text-base font-extrabold text-[#1d4f60]">
-                    ${p.precio_final.toLocaleString('es-CL')}
-                  </span>
-                  {p.descuento_porcentaje > 0 && (
-                    <span className="text-xs text-slate-400 line-through">
-                      ${p.precio.toLocaleString('es-CL')}
-                    </span>
-                  )}
-                </div>
-
-                <button
-                  id={`btn-add-cart-home-${p.id}`}
-                  onClick={() => onAddToCart(p)}
-                  className="w-full py-2 px-3 rounded-xl bg-[#ff9f43] hover:bg-[#f08e30] text-white text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm active:scale-95"
-                >
-                  <ShoppingBag className="w-3.5 h-3.5" />
-                  <span>Añadir al Carrito</span>
-                </button>
+                <h2 className="font-semibold">Contacto</h2>
+                {CLINICA.telefono && <a href={telefono!} className="block text-sm text-white/80 hover:text-white underline-offset-2 hover:underline">{CLINICA.telefono}</a>}
+                {CLINICA.correo && <a href={`mailto:${CLINICA.correo}`} className="block text-sm text-white/80 hover:text-white underline-offset-2 hover:underline">{CLINICA.correo}</a>}
               </div>
             </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Info & Contact Cards (Legacy details) */}
-      <section className="bg-white rounded-3xl p-8 sm:p-12 border border-[#9dddf5]/60 shadow-sm">
-        <div className="grid md:grid-cols-3 gap-8">
-          <div className="flex items-start gap-4">
-            <div className="w-12 h-12 rounded-xl bg-[#e2f5fc] text-[#1d95c8] shadow-xs flex items-center justify-center shrink-0">
-              <MapPin className="w-6 h-6" />
-            </div>
-            <div>
-              <h4 className="font-bold text-[#156a8e] mb-1">Ubicación</h4>
-              <p className="text-sm text-slate-600">Bello, Antioquia, Colombia</p>
-              <p className="text-xs text-slate-400 mt-1">Sede principal Mundo Peludo</p>
-            </div>
-          </div>
-
-          <div className="flex items-start gap-4">
-            <div className="w-12 h-12 rounded-xl bg-[#e2f5fc] text-[#5dca88] shadow-xs flex items-center justify-center shrink-0">
-              <Clock className="w-6 h-6" />
-            </div>
-            <div>
-              <h4 className="font-bold text-[#156a8e] mb-1">Horarios de Atención</h4>
-              <p className="text-sm text-slate-600">Lunes a Sábado: 08:00 - 20:00</p>
-              <p className="text-xs text-[#5dca88] font-bold mt-1">Urgencias Médicas: 24 Horas</p>
-            </div>
-          </div>
-
-          <div className="flex items-start gap-4">
-            <div className="w-12 h-12 rounded-xl bg-[#fff5e6] text-[#ff9f43] shadow-xs flex items-center justify-center shrink-0">
-              <Phone className="w-6 h-6" />
-            </div>
-            <div>
-              <h4 className="font-bold text-[#156a8e] mb-1">Contacto</h4>
-              <p className="text-sm text-slate-600">WhatsApp: +57 3243806941</p>
-              <p className="text-xs text-slate-500 mt-1">andres_ramirez23232@elpoli.edu.co</p>
-            </div>
-          </div>
-        </div>
-      </section>
+          )}
+          {CLINICA.urgencias && (
+            <div className="flex gap-3"><Siren className="w-5 h-5 text-[#ff9f43] shrink-0" /><div><h2 className="font-semibold">Urgencias</h2><p className="text-sm text-white/80">{CLINICA.urgencias}</p></div></div>
+          )}
+        </section>
+      )}
     </div>
   );
 };

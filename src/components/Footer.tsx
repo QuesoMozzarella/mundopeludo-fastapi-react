@@ -1,74 +1,82 @@
 import React from 'react';
+import { Clock, Mail, MapPin, Phone, Siren } from 'lucide-react';
+import { CLINICA, enlaceTelefono, hayContacto } from '../clinica';
 
 interface FooterProps {
   onNavigate: (tab: string) => void;
 }
 
-/** Pie común a la página pública y a la app con sesión. */
-export const Footer: React.FC<FooterProps> = ({ onNavigate }) => (
-  <footer className="bg-[#1d4f60] text-sky-100 text-xs border-t border-[#156a8e] py-10 px-4 mt-auto">
-    <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
-      <div>
-        <div className="flex items-center gap-2 mb-3">
-          <img 
-            src="/img/logo.jpg" 
-            alt="Logo Mundo Peludo" 
-            className="w-8 h-8 rounded-full border border-white/60 object-cover"
-            onError={(e) => {
-              (e.currentTarget as HTMLElement).style.display = 'none';
-            }}
-          />
-          <span className="font-extrabold text-base text-white tracking-wide">Mundo Peludo</span>
+/** Pie común: la marca, el contacto de `clinica.ts` y accesos directos. */
+export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
+  const telefono = enlaceTelefono();
+  return (
+    <footer className="bg-[#1d4f60] text-white/85 text-sm mt-auto">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 grid gap-8 md:grid-cols-3">
+        <div className="space-y-3">
+          <div className="flex items-center gap-2.5">
+            <img
+              src="/img/logo.jpg"
+              alt=""
+              className="w-9 h-9 rounded-full border border-white/60 object-cover bg-white"
+              onError={(e) => ((e.currentTarget as HTMLElement).style.display = 'none')}
+            />
+            <span className="font-titulo text-lg font-semibold text-white">{CLINICA.nombre}</span>
+          </div>
+          <p className="text-white/70 max-w-xs">{CLINICA.presentacion}</p>
         </div>
-        <p className="text-sky-200/80 leading-relaxed text-xs">
-          Clínica veterinaria dedicada al cuidado integral, salud y felicidad de tus mascotas con atención profesional 24/7.
+
+        {hayContacto && (
+          <div>
+            <h2 className="font-titulo text-base font-semibold text-white mb-3">Contacto</h2>
+            <ul className="space-y-2 text-white/75">
+              {CLINICA.direccion && (
+                <li className="flex gap-2"><MapPin className="w-4 h-4 mt-0.5 text-[#9dddf5] shrink-0" />{CLINICA.direccion}</li>
+              )}
+              {CLINICA.telefono && (
+                <li className="flex gap-2">
+                  <Phone className="w-4 h-4 mt-0.5 text-[#9dddf5] shrink-0" />
+                  <a href={telefono!} className="hover:text-white underline-offset-2 hover:underline">{CLINICA.telefono}</a>
+                </li>
+              )}
+              {CLINICA.correo && (
+                <li className="flex gap-2">
+                  <Mail className="w-4 h-4 mt-0.5 text-[#9dddf5] shrink-0" />
+                  <a href={`mailto:${CLINICA.correo}`} className="hover:text-white underline-offset-2 hover:underline">{CLINICA.correo}</a>
+                </li>
+              )}
+              {CLINICA.horario && (
+                <li className="flex gap-2"><Clock className="w-4 h-4 mt-0.5 text-[#9dddf5] shrink-0" />{CLINICA.horario}</li>
+              )}
+              {CLINICA.urgencias && (
+                <li className="flex gap-2"><Siren className="w-4 h-4 mt-0.5 text-[#9dddf5] shrink-0" />{CLINICA.urgencias}</li>
+              )}
+            </ul>
+          </div>
+        )}
+
+        <nav aria-label="Accesos directos" className={hayContacto ? '' : 'md:col-start-3'}>
+          <h2 className="font-titulo text-base font-semibold text-white mb-3">Accesos</h2>
+          <ul className="space-y-2">
+            {[
+              ['citas', 'Pedir una cita'],
+              ['adopciones', 'Adoptar una mascota'],
+              ['tienda', 'Ir a la tienda']
+            ].map(([tab, texto]) => (
+              <li key={tab}>
+                <button onClick={() => onNavigate(tab)} className="text-white/75 hover:text-white hover:underline underline-offset-2">
+                  {texto}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      </div>
+
+      <div className="border-t border-white/10">
+        <p className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 text-xs text-white/55">
+          © {new Date().getFullYear()} {CLINICA.nombre}
         </p>
       </div>
-
-      <div>
-        <h4 className="font-bold text-white uppercase tracking-wider text-[11px] mb-3">Contacto & Ubicación</h4>
-        <ul className="space-y-2 text-sky-200/90 text-xs">
-          <li>📍 Bello, Antioquia, Colombia</li>
-          <li>💬 WhatsApp: +57 3243806941</li>
-          <li>✉️ andres_ramirez23232@elpoli.edu.co</li>
-          <li>⏰ Urgencias: Atención Médica 24 Horas</li>
-        </ul>
-      </div>
-
-      <div>
-        <h4 className="font-bold text-white uppercase tracking-wider text-[11px] mb-3">Arquitectura Técnica</h4>
-        <p className="text-sky-200/80 leading-relaxed mb-3">
-          Nueva versión moderna desarrollada con FastAPI v2.0 (Python), Node.js Express y React + Tailwind.
-        </p>
-      </div>
-    </div>
-
-    <div className="max-w-7xl mx-auto pt-6 border-t border-[#156a8e]/60 flex flex-col sm:flex-row items-center justify-between gap-3 text-sky-200/60 text-[11px]">
-      <div>
-        © {new Date().getFullYear()} Mundo Peludo. Todos los derechos reservados.
-      </div>
-      <div className="flex items-center gap-4">
-        <button
-          onClick={() => onNavigate('inicio')}
-          className="hover:text-white transition-colors"
-        >
-          Inicio
-        </button>
-        <span>•</span>
-        <button
-          onClick={() => onNavigate('citas')}
-          className="hover:text-white transition-colors"
-        >
-          Agendar Cita
-        </button>
-        <span>•</span>
-        <button
-          onClick={() => onNavigate('tienda')}
-          className="hover:text-white transition-colors"
-        >
-          Tienda
-        </button>
-      </div>
-    </div>
-  </footer>
-);
+    </footer>
+  );
+};

@@ -36,3 +36,8 @@ export function formatearFecha(valor: string | null | undefined): string {
   const fecha = aFecha(valor);
   return fecha ? soloFecha.format(fecha) : valor || '—';
 }
+
+/** "$25.000" — pesos sin decimales, con el separador de miles de la tienda. */
+export function formatearPrecio(valor: number | null | undefined): string {
+  return `$${Math.round(valor ?? 0).toLocaleString('es-CL')}`;
+}

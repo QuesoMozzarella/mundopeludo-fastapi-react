@@ -26,7 +26,7 @@ import { CitasView } from './components/CitasView';
 import { MascotasView } from './components/MascotasView';
 import { AdopcionesView } from './components/AdopcionesView';
 import { TiendaView } from './components/TiendaView';
-import { HistorialView } from './components/HistorialView';
+import { HistorialView, NuevaHistoria } from './components/HistorialView';
 import { InventarioView } from './components/InventarioView';
 import { ServiciosView } from './components/ServiciosView';
 import { DashboardView } from './components/DashboardView';
@@ -155,7 +155,7 @@ function Clinica({ currentUser, destinoInicial, onRequiereLogin, onCerrarSesion 
 
   // Modals & Navigation Context
   const [cartModalOpen, setCartModalOpen] = useState(false);
-  const [selectedPetForHistorial, setSelectedPetForHistorial] = useState<Mascota | null>(null);
+  const [nuevaHistoria, setNuevaHistoria] = useState<NuevaHistoria | null>(null);
   const [preselectedServicioId, setPreselectedServicioId] = useState<number | null>(
     destinoInicial.context?.servicioId ?? null
   );
@@ -197,7 +197,7 @@ function Clinica({ currentUser, destinoInicial, onRequiereLogin, onCerrarSesion 
     try {
       const health = await apiService.getHealth();
       if (health.status !== 'ok') {
-        setErrorBanner('No se pudo conectar con el backend de Mundo Peludo.');
+        setErrorBanner('No hay conexión con el servidor. Revisa que el backend esté en marcha y reintenta.');
         return;
       }
 
@@ -415,12 +415,17 @@ function Clinica({ currentUser, destinoInicial, onRequiereLogin, onCerrarSesion 
     if (context?.servicioId) {
       setPreselectedServicioId(context.servicioId);
     }
+    // El formulario de historia sólo se abre solo cuando se llega desde una cita o mascota.
+    setNuevaHistoria(null);
     setActiveTab(tab);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   return (
-    <div className="min-h-screen bg-[#f7fbfe] text-[#333333] flex flex-col antialiased">
+    <div className="min-h-screen flex flex-col">
+      <a href="#contenido" className="sr-only-focusable fixed top-2 left-2 z-50 mp-btn mp-btn--claro">
+        Saltar al contenido
+      </a>
       {/* Navbar */}
       <Navbar
         activeTab={activeTab}
@@ -434,27 +439,23 @@ function Clinica({ currentUser, destinoInicial, onRequiereLogin, onCerrarSesion 
 
       {/* Error alert banner if any */}
       {errorBanner && (
-        <div className="bg-red-50 border-b border-red-200 px-4 py-2.5 text-xs text-red-700 flex items-center justify-between">
+        <div role="alert" className="bg-[#fdecee] text-[#8f1d2a] px-4 py-2.5 text-sm flex items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <AlertCircle className="w-4 h-4 shrink-0" />
             <span>{errorBanner}</span>
           </div>
-          <button
-            onClick={() => loadData(true)}
-            className="font-bold underline hover:text-red-900"
-          >
+          <button onClick={() => loadData(true)} className="font-semibold underline underline-offset-2">
             Reintentar
           </button>
         </div>
       )}
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main id="contenido" className="flex-1 min-w-0 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {loading ? (
-          <div className="flex flex-col items-center justify-center py-24 space-y-4">
-            <RefreshCw className="w-10 h-10 text-[#1d95c8] animate-spin" />
-            <h3 className="text-base font-bold text-[#156a8e]">Cargando datos de Mundo Peludo...</h3>
-            <p className="text-xs text-slate-500">Conectando con el backend FastAPI y base de datos</p>
+          <div role="status" className="flex flex-col items-center justify-center py-24 gap-3 text-white">
+            <RefreshCw className="w-9 h-9 animate-spin text-[#9dddf5]" />
+            <p className="text-base font-semibold">Cargando…</p>
           </div>
         ) : (
           <>
@@ -480,7 +481,7 @@ function Clinica({ currentUser, destinoInicial, onRequiereLogin, onCerrarSesion 
                 onUpdateEstado={handleUpdateCitaEstado}
                 onOpenHistorialModal={(cita) => {
                   const pet = mascotas.find(m => m.id === cita.mascota_id) || null;
-                  setSelectedPetForHistorial(pet);
+                  setNuevaHistoria({ mascota: pet, citaId: cita.id });
                   setActiveTab('historial');
                 }}
                 preselectedServicioId={preselectedServicioId}
@@ -494,7 +495,7 @@ function Clinica({ currentUser, destinoInicial, onRequiereLogin, onCerrarSesion 
                 currentUser={currentUser}
                 onCreateMascota={handleCreateMascota}
                 onOpenHistorialModalWithPet={(pet) => {
-                  setSelectedPetForHistorial(pet);
+                  setNuevaHistoria({ mascota: pet });
                   setActiveTab('historial');
                 }}
               />
@@ -528,7 +529,7 @@ function Clinica({ currentUser, destinoInicial, onRequiereLogin, onCerrarSesion 
                 citas={citas}
                 currentUser={currentUser}
                 onCreateHistorial={handleCreateHistorial}
-                initialSelectedPet={selectedPetForHistorial}
+                nuevaHistoria={nuevaHistoria}
               />
             )}
 
