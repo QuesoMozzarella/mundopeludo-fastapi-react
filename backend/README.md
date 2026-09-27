@@ -174,8 +174,18 @@ Los **15 modelos** del proyecto original están cubiertos:
   la 0007: cada cita ocupa `[inicio, inicio + duración)` de su servicio, no
   puede pisar otra ni salirse de la franja del veterinario, y
   `GET /api/veterinarios/{id}/agenda?servicio_id=` sólo ofrece los huecos donde
-  cabe entera. Las bases anteriores se migran solas: sus servicios quedan sin
-  precio y con 30 minutos, lo que ocupaba hasta ahora cada cita.
+  cabe entera (y, si es hoy, los que no han pasado). Las bases anteriores se
+  migran solas: sus servicios quedan sin precio y con 30 minutos, lo que
+  ocupaba hasta ahora cada cita.
+* **Reglas de agenda** (`ReglasDeAgenda`):
+  * Las citas **canceladas no ocupan** la agenda. Reactivar una (cambiar su
+    estado a otro que no sea *Cancelada*) sólo se permite si su hueco sigue
+    libre; si no, 409.
+  * Un veterinario **sin franjas declaradas no recibe citas** (antes, sin
+    franjas no había restricción horaria). Es lo que hacía el Django, que sólo
+    ofrecía horas a los veterinarios con `Disponibilidad`.
+  * Cada veterinario declara y borra **sus** franjas; el administrador, las de
+    cualquiera.
 * **`Producto.TAMANO_CHOICES` y `EDAD_CHOICES`** estaban declaradas en Django
   pero ningún campo las usaba; no se han portado.
 * **`Pedido` / `PedidoItem` son una extensión**: no existían en Django, pero el

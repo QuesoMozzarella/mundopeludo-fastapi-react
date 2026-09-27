@@ -136,8 +136,9 @@ Levantan su propio entorno y **nunca tocan el de desarrollo**:
 
 Escenarios en `e2e/`: visitante (`publico`), `autenticacion` (incluida la
 recuperación de contraseña), `cliente` (citas, compra, adopción, alta de
-mascota) y `personal` (panel, citas, historia clínica, inventario con imágenes,
-aprobar y rechazar adopciones). Tras un fallo, la traza queda en `test-results/`
+mascota), `personal` (panel, citas, historia clínica, inventario con imágenes,
+aprobar y rechazar adopciones) y `servicios` (alta y baja de servicios, horario
+de los veterinarios y horas libres del formulario de citas). Tras un fallo, la traza queda en `test-results/`
 (`npx playwright show-trace <ruta>/trace.zip`).
 
 ### Integración continua
