@@ -12,7 +12,8 @@
 | 4 | Un caso de uso por intención | ✅ Hecha (`1edf68d`) |
 | 5 | Cierre de la primera lista de pendientes: imágenes de producto por archivo, precio y duración de servicios, `MP_EMAIL_REDIRIGIR_A`, 7 escenarios e2e nuevos, CI en GitHub Actions, base antigua fuera de git | ✅ Hecha (`9db066c` … `596e492`) |
 | 6 | Agenda: las citas canceladas liberan su hueco, sin horario declarado no se agenda, el formulario de citas ofrece las horas libres reales y pantalla de *Servicios y horarios* | ✅ Hecha |
-| 7 | Despliegue: primera ejecución de CI verificada (1) y lista de producción (2) | ⏳ Siguiente |
+| 6b | Rediseño del frontend con la estética de los dashboards del Django en todo el sitio, sin datos inventados, accesible y sin desbordes en móvil | ✅ Hecha |
+| 7 | Despliegue: primera ejecución de CI verificada (1), datos de la clínica (2) y lista de producción (3) | ⏳ Siguiente |
 
 Los números entre paréntesis remiten a la sección *Pendientes*.
 
@@ -45,8 +46,13 @@ Los números entre paréntesis remiten a la sección *Pendientes*.
   plano. En desarrollo, `MP_EMAIL_REDIRIGIR_A` manda todos a una sola
   dirección (prohibida en producción).
 - **Frontend (React):** login con JWT; inicio, adopciones y tienda públicos;
-  el resto pide sesión. El inventario sube las imágenes de producto como
-  archivo (con vista previa) y al cambiarla retira la anterior.
+  el resto pide sesión. Estética de los dashboards del Django en todo el
+  sitio (lienzo azul `#1d95c8`, secciones `#156a8e`, tablas con cabecera
+  petróleo, pestañas translúcidas); clases en `src/index.css` y componentes
+  comunes en `src/components/ui.tsx` (modal accesible, avisos y
+  confirmaciones propias, ilustración por especie o categoría cuando no hay
+  foto). Sin `alert()`/`confirm()` del navegador, con foco visible y
+  navegación móvil. El inventario sube las imágenes de producto como archivo.
 - **Pruebas:** 44 de la API (`python backend/tests/test_api.py`) y 33
   escenarios e2e con Playwright (`npm run test:e2e`; `E2E_HEADLESS=1` sin
   ventana). GitHub Actions las ejecuta en cada push a `main` y en cada PR
@@ -64,7 +70,12 @@ El workflow está escrito pero todavía no ha corrido en GitHub. Tras el primer
 push, revisar la pestaña *Actions*: si las e2e fallan allí y no en local, las
 trazas quedan en el artefacto `trazas-e2e`.
 
-### 2. Antes de desplegar
+### 2. Datos públicos de la clínica
+`src/clinica.ts` tiene la dirección, el teléfono, el correo, el horario y las
+urgencias **vacíos**: se quitaron los datos personales y los inventados. Lo que
+se rellene aparece en el inicio y en el pie; lo vacío no se muestra.
+
+### 3. Antes de desplegar
 - `MP_ENV=produccion`: la app exige entonces `MP_SECRET_KEY` propia y rechaza
   `MP_EMAIL_REDIRIGIR_A`.
 - `MP_CORS_ORIGINS` con el dominio real en lugar de `*`.
@@ -74,7 +85,7 @@ trazas quedan en el artefacto `trazas-e2e`.
 - `backend/mundopeludo.db` salió del índice, pero sigue en el historial de git;
   si tuviera datos sensibles habría que reescribir el historial.
 
-### 3. Ideas que quedaron fuera (sin prioridad)
+### 4. Ideas que quedaron fuera (sin prioridad)
 - Especialidades de un servicio: la API las admite, la pantalla no las edita.
 - Excepciones al horario (vacaciones, festivos): hoy sólo hay franjas semanales.
 - Una cita que cruza la medianoche sólo se compara con las de su propio día.

@@ -149,6 +149,9 @@ API, el chequeo de tipos del frontend (`npm run lint`) y las e2e. Allí no hay
 pantalla: con `CI=true` Playwright usa su propio Chromium en modo headless, y
 si algo falla las trazas quedan como artefacto (`trazas-e2e`).
 
+Los datos públicos de la clínica (dirección, teléfono, correo, horario) se
+editan en [`src/clinica.ts`](./src/clinica.ts).
+
 Lo que queda por hacer está en [`PENDIENTES.md`](./PENDIENTES.md).
 
 ---
