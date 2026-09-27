@@ -140,7 +140,9 @@ export interface Producto {
   unidad_medida: string;
   peso: number;
   sku: string;
+  // La más reciente de las imágenes subidas (`imagenes_ids`), si hay alguna.
   imagen_url?: string;
+  imagenes_ids: number[];
   disponible_online: number;
   activo: number;
   stock_bajo?: boolean;

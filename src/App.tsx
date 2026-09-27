@@ -370,9 +370,21 @@ function Clinica({ currentUser, destinoInicial, onRequiereLogin, onCerrarSesion 
 
   // Inventory operations
   const handleCreateProducto = async (data: Partial<Producto>) => {
-    await apiService.createProducto(data);
+    const creado = await apiService.createProducto(data);
     const prods = await apiService.getProductos();
     setProductos(prods);
+    return creado;
+  };
+
+  // Sube la nueva imagen y después retira las anteriores: el producto se
+  // queda con una sola. Si falla un borrado, la nueva ya es la que se muestra.
+  const handleCambiarImagenProducto = async (id: number, archivo: File, anteriores: number[]) => {
+    try {
+      await apiService.subirImagenProducto(id, archivo);
+      await Promise.allSettled(anteriores.map((imagenId) => apiService.eliminarImagenProducto(imagenId)));
+    } finally {
+      setProductos(await apiService.getProductos());
+    }
   };
 
   const handleUpdateProducto = async (id: number, data: Partial<Producto>) => {
@@ -520,6 +532,7 @@ function Clinica({ currentUser, destinoInicial, onRequiereLogin, onCerrarSesion 
                 onCreateProducto={handleCreateProducto}
                 onUpdateProducto={handleUpdateProducto}
                 onDeleteProducto={handleDeleteProducto}
+                onCambiarImagen={handleCambiarImagenProducto}
               />
             )}
 

@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Producto, User } from '../types';
+import { TIPOS_IMAGEN, validarImagen } from '../api';
 import { 
   Package, 
   Plus, 
@@ -9,16 +10,104 @@ import {
   Edit3, 
   Trash2, 
   CheckCircle, 
-  X, 
-  RefreshCw 
+  X,
+  RefreshCw,
+  ImagePlus
 } from 'lucide-react';
+
+const IMAGEN_POR_DEFECTO = 'https://images.unsplash.com/photo-1589924691995-400dc9ecc119?w=100&auto=format&fit=crop&q=80';
+
+interface SelectorImagenProps {
+  id: string;
+  /** Imagen que ya tiene el producto (al editar). */
+  actual?: string;
+  archivo: File | null;
+  onCambio: (archivo: File | null) => void;
+}
+
+/** Elige un archivo de imagen, lo valida como la API y muestra la vista previa. */
+const SelectorImagen: React.FC<SelectorImagenProps> = ({ id, actual, archivo, onCambio }) => {
+  const [error, setError] = useState<string | null>(null);
+  const [previa, setPrevia] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!archivo) {
+      setPrevia(null);
+      return;
+    }
+    const url = URL.createObjectURL(archivo);
+    setPrevia(url);
+    return () => URL.revokeObjectURL(url);
+  }, [archivo]);
+
+  const alElegir = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const elegido = e.target.files?.[0] ?? null;
+    e.target.value = ''; // permite volver a elegir el mismo archivo
+    if (!elegido) return;
+    const problema = validarImagen(elegido);
+    setError(problema);
+    onCambio(problema ? null : elegido);
+  };
+
+  const mostrada = previa || actual;
+
+  return (
+    <div>
+      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+        Imagen del Producto (Opcional)
+      </label>
+      <div className="flex items-center gap-3">
+        <div className="w-16 h-16 rounded-xl border border-slate-200 bg-slate-50 overflow-hidden shrink-0 flex items-center justify-center">
+          {mostrada ? (
+            <img id={`${id}-previa`} src={mostrada} alt="Vista previa" className="w-full h-full object-cover" />
+          ) : (
+            <ImagePlus className="w-6 h-6 text-slate-300" />
+          )}
+        </div>
+        <div className="flex-1 min-w-0 space-y-1">
+          <label
+            htmlFor={id}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
+          >
+            <ImagePlus className="w-3.5 h-3.5" />
+            {mostrada ? 'Cambiar imagen' : 'Elegir imagen'}
+          </label>
+          <input
+            type="file"
+            id={id}
+            accept={TIPOS_IMAGEN.join(',')}
+            onChange={alElegir}
+            className="sr-only"
+          />
+          {archivo ? (
+            <div className="flex items-center gap-2 text-[11px] text-slate-500">
+              <span className="truncate">{archivo.name}</span>
+              <button
+                type="button"
+                onClick={() => onCambio(null)}
+                className="text-slate-400 hover:text-red-600 font-semibold shrink-0"
+              >
+                Quitar
+              </button>
+            </div>
+          ) : (
+            <div className="text-[11px] text-slate-400">JPG, PNG, WEBP o GIF, hasta 5 MB.</div>
+          )}
+          {error && <div className="text-[11px] font-semibold text-red-600">{error}</div>}
+        </div>
+      </div>
+    </div>
+  );
+};
 
 interface InventarioViewProps {
   productos: Producto[];
   currentUser: User;
-  onCreateProducto: (data: Partial<Producto>) => Promise<void>;
+  onCreateProducto: (data: Partial<Producto>) => Promise<Producto>;
   onUpdateProducto: (id: number, data: Partial<Producto>) => Promise<void>;
   onDeleteProducto: (id: number) => Promise<void>;
+  /** Sube `archivo` como imagen del producto y retira las `anteriores`. */
+  onCambiarImagen: (id: number, archivo: File, anteriores: number[]) => Promise<void>;
 }
 
 export const InventarioView: React.FC<InventarioViewProps> = ({
@@ -26,7 +115,8 @@ export const InventarioView: React.FC<InventarioViewProps> = ({
   currentUser,
   onCreateProducto,
   onUpdateProducto,
-  onDeleteProducto
+  onDeleteProducto,
+  onCambiarImagen
 }) => {
   const [search, setSearch] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
@@ -45,7 +135,8 @@ export const InventarioView: React.FC<InventarioViewProps> = ({
   const [unidadMedida, setUnidadMedida] = useState('unidad');
   const [peso, setPeso] = useState<number>(1);
   const [descripcion, setDescripcion] = useState('');
-  const [imagenUrl, setImagenUrl] = useState('');
+  const [imagen, setImagen] = useState<File | null>(null);
+  const [imagenEdit, setImagenEdit] = useState<File | null>(null);
 
   const filteredProductos = productos.filter((p) => {
     if (search.trim()) {
@@ -63,11 +154,21 @@ export const InventarioView: React.FC<InventarioViewProps> = ({
   const lowStockCount = productos.filter(p => p.stock <= p.stock_minimo).length;
   const outOfStockCount = productos.filter(p => p.stock === 0).length;
 
+  const cerrarNuevo = () => {
+    setModalOpen(false);
+    setImagen(null);
+  };
+
+  const cerrarEdicion = () => {
+    setEditProduct(null);
+    setImagenEdit(null);
+  };
+
   const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       setIsSubmitting(true);
-      await onCreateProducto({
+      const creado = await onCreateProducto({
         nombre,
         categoria,
         marca,
@@ -78,15 +179,23 @@ export const InventarioView: React.FC<InventarioViewProps> = ({
         tipo_animal: tipoAnimal,
         unidad_medida: unidadMedida,
         peso: Number(peso),
-        descripcion,
-        imagen_url: imagenUrl || undefined
+        descripcion
       });
 
-      setModalOpen(false);
+      // El producto ya existe: si la imagen falla, se avisa y se cierra igual
+      // para no crearlo dos veces al reintentar.
+      if (imagen) {
+        try {
+          await onCambiarImagen(creado.id, imagen, []);
+        } catch (err: any) {
+          alert(`El producto se creó, pero la imagen no se pudo subir: ${err.message}. Puedes subirla desde "Editar".`);
+        }
+      }
+
+      cerrarNuevo();
       setNombre('');
       setMarca('');
       setDescripcion('');
-      setImagenUrl('');
     } catch (err: any) {
       alert(err.message || 'Error al guardar el producto');
     } finally {
@@ -113,8 +222,11 @@ export const InventarioView: React.FC<InventarioViewProps> = ({
         peso: Number(editProduct.peso),
         descripcion: editProduct.descripcion
       });
+      if (imagenEdit) {
+        await onCambiarImagen(editProduct.id, imagenEdit, editProduct.imagenes_ids);
+      }
 
-      setEditProduct(null);
+      cerrarEdicion();
     } catch (err: any) {
       alert(err.message || 'Error al actualizar el producto');
     } finally {
@@ -209,7 +321,7 @@ export const InventarioView: React.FC<InventarioViewProps> = ({
                   <td className="px-4 py-3.5">
                     <div className="flex items-center gap-3">
                       <img 
-                        src={p.imagen_url || "https://images.unsplash.com/photo-1589924691995-400dc9ecc119?w=100&auto=format&fit=crop&q=80"} 
+                        src={p.imagen_url || IMAGEN_POR_DEFECTO} 
                         alt={p.nombre} 
                         className="w-8 h-8 rounded-lg object-cover border border-slate-200 shrink-0"
                       />
@@ -285,7 +397,7 @@ export const InventarioView: React.FC<InventarioViewProps> = ({
                 <Package className="w-5 h-5 text-amber-400" />
                 <h3 className="font-bold text-lg">Agregar Producto al Inventario</h3>
               </div>
-              <button onClick={() => setModalOpen(false)} className="text-slate-400 hover:text-white p-1">
+              <button onClick={cerrarNuevo} className="text-slate-400 hover:text-white p-1">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -416,24 +528,12 @@ export const InventarioView: React.FC<InventarioViewProps> = ({
                 />
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  URL de Imagen (Opcional)
-                </label>
-                <input
-                  type="url"
-                  id="input-prod-imagen"
-                  placeholder="https://..."
-                  value={imagenUrl}
-                  onChange={(e) => setImagenUrl(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
-                />
-              </div>
+              <SelectorImagen id="input-prod-imagen" archivo={imagen} onCambio={setImagen} />
 
               <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
                 <button
                   type="button"
-                  onClick={() => setModalOpen(false)}
+                  onClick={cerrarNuevo}
                   className="px-4 py-2 rounded-xl border border-slate-300 text-slate-700 text-sm font-semibold hover:bg-slate-50"
                 >
                   Cancelar
@@ -457,8 +557,8 @@ export const InventarioView: React.FC<InventarioViewProps> = ({
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto">
           <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden my-8">
             <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between">
-              <h3 className="font-bold text-lg">Actualizar Stock y Precio</h3>
-              <button onClick={() => setEditProduct(null)} className="text-slate-400 hover:text-white p-1">
+              <h3 className="font-bold text-lg">Actualizar Producto</h3>
+              <button onClick={cerrarEdicion} className="text-slate-400 hover:text-white p-1">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -476,6 +576,7 @@ export const InventarioView: React.FC<InventarioViewProps> = ({
                   </label>
                   <input
                     type="number"
+                    id="input-edit-prod-precio"
                     value={editProduct.precio}
                     onChange={(e) => setEditProduct({ ...editProduct, precio: parseFloat(e.target.value) })}
                     className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm"
@@ -501,6 +602,7 @@ export const InventarioView: React.FC<InventarioViewProps> = ({
                   </label>
                   <input
                     type="number"
+                    id="input-edit-prod-stock"
                     value={editProduct.stock}
                     onChange={(e) => setEditProduct({ ...editProduct, stock: parseInt(e.target.value) })}
                     className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm"
@@ -522,16 +624,24 @@ export const InventarioView: React.FC<InventarioViewProps> = ({
                 </div>
               </div>
 
+              <SelectorImagen
+                id="input-edit-prod-imagen"
+                actual={editProduct.imagen_url}
+                archivo={imagenEdit}
+                onCambio={setImagenEdit}
+              />
+
               <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
                 <button
                   type="button"
-                  onClick={() => setEditProduct(null)}
+                  onClick={cerrarEdicion}
                   className="px-4 py-2 rounded-xl border border-slate-300 text-slate-700 text-sm font-semibold hover:bg-slate-50"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
+                  id="btn-submit-editar-prod"
                   disabled={isSubmitting}
                   className="px-5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-sm font-bold shadow-md disabled:opacity-50"
                 >

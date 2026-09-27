@@ -189,8 +189,12 @@ function aProducto(p: Json): Producto {
   return {
     ...p,
     peso: p.peso ?? 0,
-    // La API guarda las imágenes subidas y las sirve en /api/imagenes/{id}.
-    imagen_url: p.imagenes_ids?.length ? `${API_BASE}/imagenes/${p.imagenes_ids[0]}` : undefined,
+    // La API guarda las imágenes subidas y las sirve en /api/imagenes/{id};
+    // se muestra la última, que es la que se subió al cambiarla.
+    imagenes_ids: p.imagenes_ids ?? [],
+    imagen_url: p.imagenes_ids?.length
+      ? `${API_BASE}/imagenes/${p.imagenes_ids[p.imagenes_ids.length - 1]}`
+      : undefined,
     disponible_online: num(p.disponible_online),
     activo: num(p.activo)
   } as Producto;
@@ -446,6 +450,42 @@ export async function deleteProducto(id: number): Promise<Producto> {
   return aProducto(await request<Json>(`/productos/${id}`, { method: 'DELETE' }));
 }
 
+// Imágenes de producto: los mismos límites que valida la API.
+export const TIPOS_IMAGEN = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+export const MAX_BYTES_IMAGEN = 5 * 1024 * 1024;
+
+/** Mensaje de error si el archivo no se puede subir como imagen de producto. */
+export function validarImagen(archivo: File): string | null {
+  if (!TIPOS_IMAGEN.includes(archivo.type)) return 'La imagen debe ser JPG, PNG, WEBP o GIF.';
+  if (archivo.size > MAX_BYTES_IMAGEN) return 'La imagen supera el máximo de 5 MB.';
+  return null;
+}
+
+function leerComoDataUrl(archivo: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const lector = new FileReader();
+    lector.onload = () => resolve(lector.result as string);
+    lector.onerror = () => reject(new ApiError('No se pudo leer la imagen', 0));
+    lector.readAsDataURL(archivo);
+  });
+}
+
+/** Sube la imagen en base64 (la API admite el data URI tal cual). */
+export async function subirImagenProducto(productoId: number, archivo: File): Promise<{ id: number; url: string }> {
+  return request(`/productos/${productoId}/imagenes`, {
+    method: 'POST',
+    body: JSON.stringify({
+      imagen_base64: await leerComoDataUrl(archivo),
+      nombre_archivo: archivo.name,
+      tipo_contenido: archivo.type
+    })
+  });
+}
+
+export async function eliminarImagenProducto(imagenId: number): Promise<void> {
+  await request(`/imagenes/${imagenId}`, { method: 'DELETE' });
+}
+
 // Compra directa: el carrito vive en el navegador y viaja entero en `items`.
 export async function checkout(data: {
   usuario_id: number;
@@ -492,6 +532,8 @@ export const apiService = {
   createProducto,
   updateProducto,
   deleteProducto,
+  subirImagenProducto,
+  eliminarImagenProducto,
   createPedido: async (data: {
     cliente_id: number;
     items: { producto_id: number; cantidad: number }[];
