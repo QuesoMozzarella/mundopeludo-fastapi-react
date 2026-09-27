@@ -1743,7 +1743,35 @@ def test_cabeceras_de_seguridad():
     assert "strict-transport-security" not in r.headers  # sólo en producción
     prod = crear_cliente(create_app(Config(
         ruta_bd=":memory:", url_bd="", entorno="produccion", secreto_jwt="clave-propia", correo_host="")))
+    https = {"x-forwarded-proto": "https"}
+    assert prod.get("/api/health", headers=https).headers.get("strict-transport-security", "").startswith("max-age=")
+    # También en la redirección de http a https.
     assert prod.get("/api/health").headers.get("strict-transport-security", "").startswith("max-age=")
+
+
+def test_produccion_redirige_a_https_y_al_dominio_canonico():
+    def cliente(host_canonico=""):
+        return crear_cliente(create_app(Config(
+            ruta_bd=":memory:", url_bd="", entorno="produccion", secreto_jwt="clave-propia",
+            correo_host="", host_canonico=host_canonico)))
+
+    cli = cliente("www.mundopeludo.me")
+    https_www = {"x-forwarded-proto": "https", "host": "www.mundopeludo.me"}
+    assert cli.get("/api/health", headers=https_www).status == 200
+    # http -> https en el mismo dominio, conservando ruta y consulta.
+    r = cli.get("/tienda", params={"q": "gato"}, headers={"x-forwarded-proto": "http", "host": "www.mundopeludo.me"})
+    assert r.status == 301 and r.headers["location"] == "https://www.mundopeludo.me/tienda?q=gato", r.headers
+    # La raíz y el dominio de Heroku van al canónico.
+    for host in ("mundopeludo.me", "mundopeludo-e6c6164f20a0.herokuapp.com"):
+        r = cli.get("/citas", headers={"x-forwarded-proto": "https", "host": host})
+        assert r.status == 301 and r.headers["location"] == "https://www.mundopeludo.me/citas", (host, r.headers)
+    # Un POST no se convierte en GET: 308.
+    r = cli.post("/api/auth/login", {"email": "a@b.c", "password": "x"}, headers={"x-forwarded-proto": "http", "host": "www.mundopeludo.me"})
+    assert r.status == 308, r
+    # Sin dominio canónico sólo se fuerza https.
+    sin = cliente()
+    assert sin.get("/api/health", headers={"x-forwarded-proto": "https", "host": "cualquiera.test"}).status == 200
+    assert sin.get("/api/health", headers={"x-forwarded-proto": "http", "host": "cualquiera.test"}).status == 301
 
 
 def _ejecutar_todo() -> int:

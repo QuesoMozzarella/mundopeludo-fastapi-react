@@ -57,11 +57,13 @@ class ClienteASGI:
 
     async def _enviar(self, metodo, ruta, json_body, params, headers) -> Respuesta:
         cuerpo = b"" if json_body is None else json.dumps(json_body).encode()
-        cabeceras = [(b"host", b"testserver")]
+        extra = {clave.lower(): str(valor) for clave, valor in (headers or {}).items()}
+        # El host de la prueba, si lo indica, sustituye al de por defecto.
+        cabeceras = [(b"host", extra.pop("host", "testserver").encode())]
         if json_body is not None:
             cabeceras.append((b"content-type", b"application/json"))
-        for clave, valor in (headers or {}).items():
-            cabeceras.append((clave.lower().encode(), str(valor).encode()))
+        for clave, valor in extra.items():
+            cabeceras.append((clave.encode(), valor.encode()))
 
         scope = {
             "type": "http",

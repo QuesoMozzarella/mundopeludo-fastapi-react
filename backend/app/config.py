@@ -25,6 +25,9 @@ class Config:
     conexiones_bd: int = field(default_factory=lambda: int(os.getenv("MP_DB_POOL", "5")))
     # La SPA compilada (`npm run build`). Si existe, FastAPI la sirve también:
     # así en Heroku basta un proceso para la web y la API.
+    # Dominio público único (p. ej. www.mundopeludo.me). En producción, las
+    # peticiones por http o por otro dominio se redirigen a https://<este>.
+    host_canonico: str = field(default_factory=lambda: os.getenv("MP_HOST_CANONICO", "").strip().lower())
     dir_frontend: str = field(default_factory=lambda: os.getenv("MP_FRONTEND_DIR", str(RAIZ.parent / "dist")))
     secreto_jwt: str = field(default_factory=lambda: os.getenv("MP_SECRET_KEY", SECRETO_DESARROLLO))
     minutos_token: int = field(default_factory=lambda: int(os.getenv("MP_TOKEN_MINUTES", "720")))

@@ -10,7 +10,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from .config import Config, config as config_global
@@ -74,6 +74,10 @@ def create_app(configuracion: Config | None = None) -> FastAPI:
     )
 
     registrar_manejadores(app)
+    # El último middleware registrado es el más externo: las cabeceras de
+    # seguridad se añaden también a las redirecciones a https.
+    if contenedor.config.es_produccion:
+        _forzar_https(app, contenedor.config.host_canonico)
     _cabeceras_de_seguridad(app, hsts=contenedor.config.es_produccion)
 
     for router in (
@@ -94,6 +98,29 @@ def create_app(configuracion: Config | None = None) -> FastAPI:
         _servir_frontend(app, frontend)
 
     return app
+
+
+def _forzar_https(app: FastAPI, host_canonico: str) -> None:
+    """En producción todo va por https y, si se indica, a un único dominio.
+
+    Heroku termina TLS en su router y avisa con X-Forwarded-Proto. Una petición
+    por http, o por un dominio distinto del canónico (la raíz sin www o el de
+    herokuapp.com), recibe una redirección a https://<canónico>/<misma ruta>.
+    GET y HEAD con 301; el resto con 308 para no convertir un POST en GET.
+    """
+
+    @app.middleware("http")
+    async def redirigir(request, call_next):
+        protocolo = request.headers.get("x-forwarded-proto", request.url.scheme)
+        host = (request.headers.get("host") or "").split(":")[0].lower()
+        destino = host_canonico or host
+        if protocolo == "https" and host == destino:
+            return await call_next(request)
+        url = f"https://{destino}{request.url.path}"
+        if request.url.query:
+            url += f"?{request.url.query}"
+        codigo = 301 if request.method in ("GET", "HEAD") else 308
+        return RedirectResponse(url, status_code=codigo)
 
 
 def _cabeceras_de_seguridad(app: FastAPI, hsts: bool) -> None:
