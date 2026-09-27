@@ -1,0 +1,57 @@
+# Ejecuta las pruebas de la API, el chequeo de tipos del frontend y las e2e
+# de Playwright en cada push y pull request.
+name: Pruebas
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: pruebas-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  api:
+    name: API (backend)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - run: pip install -r backend/requirements.txt
+      - run: python backend/tests/test_api.py
+
+  e2e:
+    name: Navegador (e2e)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: pip install -r backend/requirements.txt
+      - run: npm ci
+      - name: Tipos del frontend
+        run: npm run lint
+      # Con CI=true la configuración usa este Chromium, sin pantalla (headless).
+      - name: Instalar Chromium de Playwright
+        run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - name: Guardar trazas de los fallos
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trazas-e2e
+          path: test-results/
+          retention-days: 7

@@ -1,14 +1,19 @@
 import { existsSync } from 'node:fs';
 import { defineConfig } from '@playwright/test';
 
+// En integración continua (GitHub Actions define CI=true) no hay pantalla.
+const EN_CI = Boolean(process.env.CI);
+
 /**
  * Navegador ya instalado en el equipo (no se descarga ninguno):
  * 1. E2E_NAVEGADOR, si se define, con la ruta al ejecutable;
- * 2. Brave o Chrome en su ruta habitual de cualquier unidad;
- * 3. si no, Microsoft Edge, que viene con Windows.
+ * 2. en CI, el Chromium de Playwright (`npx playwright install chromium`);
+ * 3. Brave o Chrome en su ruta habitual de cualquier unidad;
+ * 4. si no, Microsoft Edge, que viene con Windows.
  */
 function navegador() {
   if (process.env.E2E_NAVEGADOR) return { launchOptions: { executablePath: process.env.E2E_NAVEGADOR } };
+  if (EN_CI) return {};
   const unidades = ['C', 'D', 'P'];
   const rutas = unidades.flatMap((u) => [
     `${u}:/Program Files/BraveSoftware/Brave-Browser/Application/brave.exe`,
@@ -30,10 +35,11 @@ export default defineConfig({
   workers: 1,
   timeout: 45_000,
   expect: { timeout: 10_000 },
-  reporter: [['list']],
+  reporter: EN_CI ? [['list'], ['github']] : [['list']],
   use: {
     baseURL: `http://localhost:${PUERTO_WEB}`,
-    headless: false,
+    // En local se ve el navegador; E2E_HEADLESS=1 lo oculta también aquí.
+    headless: EN_CI || process.env.E2E_HEADLESS === '1',
     ...navegador(),
     viewport: { width: 1366, height: 800 },
     trace: 'retain-on-failure',
