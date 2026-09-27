@@ -1,0 +1,2 @@
+# Heroku instala las dependencias desde la raíz del repositorio.
+-r backend/requirements.txt

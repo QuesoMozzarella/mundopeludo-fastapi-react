@@ -1709,6 +1709,32 @@ def test_migracion_anade_precio_y_duracion_a_servicios():
     ], servicios
 
 
+def test_sirve_el_frontend_compilado():
+    base = tempfile.mkdtemp(prefix="mundopeludo-web-")
+    dist = os.path.join(base, "dist")
+    os.makedirs(os.path.join(dist, "assets"))
+    with open(os.path.join(dist, "index.html"), "w", encoding="utf-8") as f:
+        f.write("<!doctype html><title>SPA</title>")
+    with open(os.path.join(dist, "assets", "app.js"), "w", encoding="utf-8") as f:
+        f.write("console.log('app')")
+    with open(os.path.join(base, "secreto.txt"), "w", encoding="utf-8") as f:
+        f.write("no debe salir")
+    cli = crear_cliente(create_app(Config(
+        ruta_bd=":memory:", url_bd="", secreto_jwt="s", exigir_auth=False, correo_host="",
+        dir_frontend=dist,
+    )))
+
+    assert b"<title>SPA</title>" in cli.get("/").cuerpo
+    assert cli.get("/assets/app.js").cuerpo == b"console.log('app')"
+    # Las rutas de la SPA (recarga en /citas) devuelven index.html.
+    assert b"<title>SPA</title>" in cli.get("/citas").cuerpo
+    # La API no cae en la SPA: un endpoint inexistente es un 404 de verdad.
+    assert cli.get("/api/no-existe").status == 404
+    assert cli.get("/api/health").json()["status"] == "ok"
+    for ruta in ("/../secreto.txt", "/%2e%2e/secreto.txt", "/assets/../../secreto.txt"):
+        assert b"no debe salir" not in cli.get(ruta).cuerpo, ruta
+
+
 def _ejecutar_todo() -> int:
     pruebas = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     fallos = 0

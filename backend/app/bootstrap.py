@@ -6,9 +6,12 @@ encuentran; el dominio nunca importa nada de aquí.
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from .config import Config, config as config_global
 from .interfaces.http.deps import Contenedor, instalar_contenedor
@@ -85,4 +88,34 @@ def create_app(configuracion: Config | None = None) -> FastAPI:
     ):
         app.include_router(router)
 
+    frontend = Path(configuracion.dir_frontend)
+    if (frontend / "index.html").is_file():
+        _servir_frontend(app, frontend)
+
     return app
+
+
+def _servir_frontend(app: FastAPI, carpeta: Path) -> None:
+    """Sirve la SPA compilada (`npm run build`) desde el mismo proceso.
+
+    En producción (Heroku) no hay servidor Node: FastAPI entrega la web y la
+    API. Las rutas de la API van antes; cualquier otra ruta devuelve el
+    archivo pedido si existe o `index.html` (la SPA decide qué mostrar).
+    """
+    carpeta = carpeta.resolve()
+    indice = carpeta / "index.html"
+    if (carpeta / "assets").is_dir():
+        # Nombres con hash de Vite: se pueden cachear sin miedo.
+        app.mount("/assets", StaticFiles(directory=carpeta / "assets"), name="assets")
+
+    @app.get("/{ruta:path}", include_in_schema=False)
+    def spa(ruta: str) -> FileResponse:
+        if ruta == "api" or ruta.startswith("api/"):
+            raise HTTPException(status_code=404, detail="Recurso no encontrado")
+        archivo = (carpeta / ruta).resolve()
+        if ruta and archivo.is_file() and carpeta in archivo.parents:
+            return FileResponse(archivo)
+        # index.html sin caché: tras un despliegue se carga la versión nueva.
+        return FileResponse(indice, headers={"Cache-Control": "no-cache"})
+
+    log.info("Sirviendo el frontend desde %s", carpeta)

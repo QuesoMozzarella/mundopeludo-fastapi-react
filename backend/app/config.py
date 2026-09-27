@@ -23,6 +23,9 @@ class Config:
     # está definida se usa en lugar del archivo SQLite de `ruta_bd`.
     url_bd: str = field(default_factory=lambda: os.getenv("DATABASE_URL", ""))
     conexiones_bd: int = field(default_factory=lambda: int(os.getenv("MP_DB_POOL", "5")))
+    # La SPA compilada (`npm run build`). Si existe, FastAPI la sirve también:
+    # así en Heroku basta un proceso para la web y la API.
+    dir_frontend: str = field(default_factory=lambda: os.getenv("MP_FRONTEND_DIR", str(RAIZ.parent / "dist")))
     secreto_jwt: str = field(default_factory=lambda: os.getenv("MP_SECRET_KEY", SECRETO_DESARROLLO))
     minutos_token: int = field(default_factory=lambda: int(os.getenv("MP_TOKEN_MINUTES", "720")))
     origenes_cors: list[str] = field(default_factory=lambda: [o for o in os.getenv("MP_CORS_ORIGINS", "*").split(",") if o])

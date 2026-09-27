@@ -108,6 +108,9 @@ en `.gitignore`: las credenciales nunca van al repositorio.
 | Variable | Por defecto | Para qué sirve |
 |---|---|---|
 | `MP_DB_PATH` | `backend/data/mundopeludo.db` | Ruta del archivo SQLite |
+| `DATABASE_URL` | vacío | URL de **PostgreSQL** (Heroku la define al añadir Heroku Postgres). Si está, se usa en lugar de SQLite |
+| `MP_DB_POOL` | `5` | Conexiones del pool de PostgreSQL por proceso |
+| `MP_FRONTEND_DIR` | `dist/` | SPA compilada que FastAPI sirve junto a la API (si existe) |
 | `MP_SECRET_KEY` | clave de desarrollo | Firma de los JWT. **Obligatoria en producción**: la app no arranca con la de desarrollo |
 | `MP_TOKEN_MINUTES` | `720` | Vigencia del token |
 | `MP_CORS_ORIGINS` | `*` | Orígenes permitidos, separados por coma |

@@ -1,0 +1,7 @@
+# No hace falta en el servidor de Heroku (reduce el tamaño del slug).
+legacy_django/
+e2e/
+docs/
+test-results/
+backend/tests/
+backend/mundopeludo.db

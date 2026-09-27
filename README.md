@@ -83,12 +83,34 @@ El servidor Vite levantará automáticamente tanto el frontend como el backend d
 ## 📦 Construcción para Producción
 
 ```bash
-# Compilar frontend
-npm run build
-
-# Iniciar servidor Node.js
-npm start
+npm run build                               # compila la SPA en dist/
+uvicorn backend.main:app --port 8000        # sirve la web (dist/) y la API
 ```
+
+Si existe `dist/`, FastAPI sirve también la web: un solo proceso para todo.
+`npm start` (server.ts, Express + proxy) sigue disponible para uso local.
+
+### Despliegue en Heroku
+
+Heroku compila el frontend (buildpack de Node) e instala el backend
+(buildpack de Python); el `Procfile` arranca uvicorn. La base de datos es
+**Heroku Postgres**: con `DATABASE_URL` la API usa PostgreSQL (el disco de
+Heroku se borra en cada reinicio, así que SQLite no sirve allí).
+
+```bash
+heroku create <nombre-app> --region us
+heroku buildpacks:add heroku/nodejs
+heroku buildpacks:add heroku/python
+heroku addons:create heroku-postgresql:essential-0
+heroku config:set MP_ENV=produccion \
+  MP_SECRET_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(48))')" \
+  MP_CORS_ORIGINS=https://<nombre-app>.herokuapp.com
+git push heroku main
+heroku run python backend/crear_superusuario.py   # primer administrador
+```
+
+Opcional: `MP_EMAIL_*` para enviar correos y `MP_DB_POOL` (conexiones por
+dyno, 5 por defecto; Essential-0 admite 20).
 
 ---
 

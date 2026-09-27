@@ -4,7 +4,7 @@ from __future__ import annotations
 from fastapi import APIRouter, status
 
 from ..casos import ConsultarActividadDep, ObtenerEstadisticasDep, RegistrarActividadDep
-from ..deps import SoloPersonal
+from ..deps import ConfigDep, SoloPersonal
 from ..schemas.sistema import ActividadIn, ActividadOut, EstadisticasOut, SaludOut
 
 router = APIRouter(prefix="/api", tags=["sistema"])
@@ -12,8 +12,8 @@ VERSION = "3.0.0"
 
 
 @router.get("/health", response_model=SaludOut, summary="Estado del servicio")
-def salud() -> SaludOut:
-    return SaludOut(version=VERSION)
+def salud(configuracion: ConfigDep) -> SaludOut:
+    return SaludOut(version=VERSION, persistencia="postgresql" if configuracion.url_bd else "sqlite3")
 
 
 @router.get(

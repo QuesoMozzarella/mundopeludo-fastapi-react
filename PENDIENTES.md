@@ -13,7 +13,7 @@
 | 5 | Cierre de la primera lista de pendientes: imágenes de producto por archivo, precio y duración de servicios, `MP_EMAIL_REDIRIGIR_A`, 7 escenarios e2e nuevos, CI en GitHub Actions, base antigua fuera de git | ✅ Hecha (`9db066c` … `596e492`) |
 | 6 | Agenda: las citas canceladas liberan su hueco, sin horario declarado no se agenda, el formulario de citas ofrece las horas libres reales y pantalla de *Servicios y horarios* | ✅ Hecha |
 | 6b | Rediseño del frontend con la estética de los dashboards del Django en todo el sitio, sin datos inventados, accesible y sin desbordes en móvil | ✅ Hecha |
-| 7 | Despliegue: primera ejecución de CI verificada (1), datos de la clínica (2) y lista de producción (3) | ⏳ Siguiente |
+| 7 | Despliegue: CI en verde (SQLite, PostgreSQL y e2e), soporte de PostgreSQL, FastAPI sirviendo la web, archivos de Heroku. Falta crear la app en Heroku (1) y rellenar los datos de la clínica (2) | 🔄 En curso |
 
 Los números entre paréntesis remiten a la sección *Pendientes*.
 
@@ -65,10 +65,11 @@ Los números entre paréntesis remiten a la sección *Pendientes*.
 
 ## Pendientes
 
-### 1. Comprobar la primera ejecución de CI
-El workflow está escrito pero todavía no ha corrido en GitHub. Tras el primer
-push, revisar la pestaña *Actions*: si las e2e fallan allí y no en local, las
-trazas quedan en el artefacto `trazas-e2e`.
+### 1. Crear la app en Heroku
+Todo el código está listo (ver *Despliegue en Heroku* en el README). Falta lo
+que depende de la cuenta: CLI de Heroku instalada y `heroku login`, nombre de
+la app, región y el correo del primer administrador. Coste aproximado: dyno
+Eco (~5 USD/mes) + Heroku Postgres Essential-0 (~5 USD/mes).
 
 ### 2. Datos públicos de la clínica
 `src/clinica.ts` tiene la dirección, el teléfono, el correo, el horario y las
