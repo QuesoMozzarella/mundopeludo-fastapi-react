@@ -10,14 +10,14 @@ test.describe('Visitante sin sesión', () => {
     await expect(page.getByText('Consulta General').first()).toBeVisible();
     await expect(page.getByText('Juguete Mordedor Hueso').first()).toBeVisible();
     // Precio y duración de los servicios (los recuperó la API; seed.py los rellena).
-    await expect(page.getByText('⏱️ 120 minutos')).toBeVisible();
+    await expect(page.getByText('120 min', { exact: true })).toBeVisible();
     await expect(page.getByText('$150.000')).toBeVisible();
   });
 
   test('adopciones se ven sin iniciar sesión', async ({ page }) => {
     await page.goto('/');
     await page.locator('#nav-adopciones').click();
-    await expect(page.getByRole('heading', { name: /Programa de Adopciones/ })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Adopciones', exact: true })).toBeVisible();
     await expect(page.getByText('Rocky').first()).toBeVisible();
     // La gestión de solicitudes es privada.
     await expect(page.locator('#subtab-solicitudes-adopciones')).toHaveCount(0);
@@ -33,7 +33,7 @@ test.describe('Visitante sin sesión', () => {
   test('la tienda se ve y el carrito pide iniciar sesión para pagar', async ({ page }) => {
     await page.goto('/');
     await page.locator('#nav-tienda').click();
-    await expect(page.getByRole('heading', { name: /Farmacia y Tienda/ })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Farmacia y tienda' })).toBeVisible();
     await page.locator('[id^="btn-add-cart-"]').first().click();
 
     await page.locator('#btn-open-cart').click();

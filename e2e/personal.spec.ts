@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import {
   cerrarSesion,
+  confirmarDialogo,
   crearMascotaEnAdopcion,
   CUENTAS,
   elegirOpcion,
@@ -14,7 +15,7 @@ import {
 
 /** Cabecera de la solicitud de adopción: el título y su estado van juntos. */
 function cabeceraSolicitud(page: Page, mascota: string) {
-  return page.locator('h4', { hasText: `Postulación por ${mascota}` }).locator('..');
+  return page.locator('h3', { hasText: `Postulación por ${mascota}` }).locator('..');
 }
 
 test.describe('Personal de la clínica', () => {
@@ -70,7 +71,6 @@ test.describe('Personal de la clínica', () => {
 
   test('el administrador crea un producto con imagen, la cambia y lo desactiva', async ({ page }) => {
     const nombre = unico('Collar e2e');
-    page.on('dialog', (dialogo) => dialogo.accept()); // confirmación de la baja
     await iniciarSesion(page, CUENTAS.admin);
     await page.locator('#nav-inventario').click();
     await page.locator('#btn-agregar-producto-inv').click();
@@ -106,7 +106,7 @@ test.describe('Personal de la clínica', () => {
       name: 'collar-2.png', mimeType: 'image/png', buffer: PNG_1PX
     });
     await page.locator('#btn-submit-editar-prod').click();
-    await expect(fila).toContainText('Bajo Stock');
+    await expect(fila).toContainText('Stock bajo');
     await expect(miniatura).not.toHaveAttribute('src', primera!);
     const anterior = await page.request.get(primera!);
     expect(anterior.status(), 'la imagen anterior se retira').toBe(404);
@@ -119,6 +119,7 @@ test.describe('Personal de la clínica', () => {
     // Baja lógica: desaparece del inventario.
     await page.locator('#nav-inventario').click();
     await fila.locator('[id^="btn-delete-prod-"]').click();
+    await confirmarDialogo(page);
     await expect(fila).toHaveCount(0);
   });
 
@@ -131,7 +132,7 @@ test.describe('Personal de la clínica', () => {
     await page.locator(`#btn-solicitar-adopcion-${mascota.id}`).click();
     await page.locator('#textarea-motivo-adopcion').fill('Vivo en casa con patio y trabajo desde casa.');
     await page.locator('#btn-enviar-solicitud-adopcion').click();
-    await expect(cabeceraSolicitud(page, mascota.nombre)).toContainText('En Revisión');
+    await expect(cabeceraSolicitud(page, mascota.nombre)).toContainText('En revisión');
     await cerrarSesion(page);
 
     await iniciarSesion(page, CUENTAS.admin);
@@ -140,6 +141,7 @@ test.describe('Personal de la clínica', () => {
     await tarjetaCon(page, `Postulación por ${mascota.nombre}`)
       .locator('[id^="btn-aprobar-solicitud-"]')
       .click();
+    await confirmarDialogo(page);
     await expect(cabeceraSolicitud(page, mascota.nombre)).toContainText('Aprobada');
     await page.locator('#subtab-catalogo-adopciones').click();
     await expect(page.locator(`#btn-solicitar-adopcion-${mascota.id}`)).toHaveCount(0);
@@ -165,8 +167,9 @@ test.describe('Personal de la clínica', () => {
     await page.locator('#nav-adopciones').click();
     await page.locator('#subtab-solicitudes-adopciones').click();
     const tarjeta = tarjetaCon(page, `Postulación por ${mascota.nombre}`);
-    await tarjeta.getByPlaceholder('Notas de revisión (opcional)...').fill('Falta visita al domicilio');
+    await tarjeta.getByPlaceholder('Nota para el solicitante (opcional)').fill('Falta visita al domicilio');
     await tarjeta.locator('[id^="btn-rechazar-solicitud-"]').click();
+    await confirmarDialogo(page);
 
     await expect(cabeceraSolicitud(page, mascota.nombre)).toContainText('Rechazada');
     await expect(page.getByText('Falta visita al domicilio')).toBeVisible();

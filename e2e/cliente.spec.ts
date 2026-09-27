@@ -39,8 +39,7 @@ test.describe('Cliente (María, de seed.py)', () => {
     await page.locator('#input-cart-direccion').fill('Retiro en clínica');
     await page.locator('#btn-confirmar-compra').click();
 
-    await expect(page.getByText('¡Pedido Confirmado con Éxito!')).toBeVisible();
-    await expect(page.getByText(/#PED-\d+/)).toBeVisible();
+    await expect(page.getByRole('heading', { name: /Pedido #PED-\d+ registrado/ })).toBeVisible();
   });
 
   test('postula a una adopción y la solicitud muestra su teléfono', async ({ page }) => {
@@ -68,7 +67,7 @@ test.describe('Cliente (María, de seed.py)', () => {
     await page.locator('#btn-submit-mascota').click();
 
     await tarjetaCon(page, nombre).locator('[id^="btn-ver-ficha-"]').click();
-    await expect(page.getByText('Observaciones de la Mascota: Alérgico al pollo, muy sociable.')).toBeVisible();
+    await expect(page.getByText('Notas: Alérgico al pollo, muy sociable.')).toBeVisible();
     await expect(page.getByRole('img', { name: nombre }).last()).toHaveAttribute('src', imagen);
   });
 

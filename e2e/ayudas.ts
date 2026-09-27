@@ -29,6 +29,11 @@ export async function iniciarSesion(page: Page, email: string) {
   await expect(page.locator('#btn-user-role-menu')).toBeVisible();
 }
 
+/** Acepta el diálogo de confirmación propio de la app. */
+export async function confirmarDialogo(page: Page) {
+  await page.locator('#btn-confirmar-dialogo').click();
+}
+
 export async function cerrarSesion(page: Page) {
   await page.locator('#btn-user-role-menu').click();
   await page.locator('#btn-cerrar-sesion').click();
@@ -45,7 +50,7 @@ export async function elegirOpcion(select: Locator, texto: string) {
 /** Tarjeta (el contenedor más interno con botones) que contiene `texto`. */
 export function tarjetaCon(page: Page, texto: string): Locator {
   return page
-    .locator('div')
+    .locator('article, div')
     .filter({ has: page.getByText(texto, { exact: true }) })
     .filter({ has: page.locator('button') })
     .last();

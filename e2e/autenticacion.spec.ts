@@ -26,7 +26,7 @@ test.describe('Autenticación', () => {
     await page.goto('/');
     await page.locator('#nav-citas').click();
     await rellenarLogin(page, CUENTAS.cliente);
-    await expect(page.getByRole('heading', { name: 'Gestión de Citas Médicas' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Mis citas' })).toBeVisible();
   });
 
   test('el registro crea una cuenta de cliente y entra con ella', async ({ page }) => {
@@ -42,7 +42,7 @@ test.describe('Autenticación', () => {
 
     const menu = page.locator('#btn-user-role-menu');
     await expect(menu).toContainText('Prueba');
-    await expect(menu).toContainText('cliente');
+    await expect(menu).toContainText('Cliente');
   });
 
   test('recupera la contraseña con el código y entra con la nueva', async ({ page }) => {
