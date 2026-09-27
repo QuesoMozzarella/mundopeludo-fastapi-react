@@ -109,6 +109,11 @@ git push heroku main
 heroku run python backend/crear_superusuario.py   # primer administrador
 ```
 
+Dominio propio: `heroku domains:add` para la raíz y para `www`, un `ALIAS`
+(raíz) y un `CNAME` (`www`) hacia los DNS target que da Heroku,
+`heroku certs:auto:enable` y `MP_HOST_CANONICO=www.<dominio>`: la app
+redirige http, la raíz y el dominio de herokuapp.com a `https://www.<dominio>`.
+
 Opcional: `MP_EMAIL_*` para enviar correos y `MP_DB_POOL` (conexiones por
 dyno, 5 por defecto; Essential-0 admite 20).
 

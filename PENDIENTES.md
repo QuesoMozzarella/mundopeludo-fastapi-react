@@ -66,10 +66,10 @@ Los números entre paréntesis remiten a la sección *Pendientes*.
 ## Pendientes
 
 ### 1. Terminar la puesta en producción (Heroku)
-La app está desplegada en https://mundopeludo-e6c6164f20a0.herokuapp.com
-(app `mundopeludo`, región EE. UU., Heroku Postgres Essential-0). Falta:
-- **Primer administrador:** `heroku run python backend/crear_superusuario.py -a mundopeludo`
-  (pide la contraseña: hay que ejecutarlo en una terminal propia).
+La app está en **https://www.mundopeludo.me** (app `mundopeludo`, región
+EE. UU., Heroku Postgres Essential-0). DNS en Namecheap: `ALIAS @` y
+`CNAME www` hacia Heroku, certificados automáticos (ACM) en ambos; la raíz,
+http y el dominio de herokuapp.com redirigen a https://www. Falta:
 - **Dyno Eco:** la cuenta tiene que suscribirse a Eco (Billing); hoy corre en
   Basic. Después: `heroku ps:type web=eco -a mundopeludo`.
 - **Renovar las credenciales de Postgres** (se compartieron en texto):
