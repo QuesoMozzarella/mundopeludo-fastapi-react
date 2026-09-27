@@ -75,6 +75,19 @@ def _crear(cli, email, tipo="cliente", **extra):
     return r.json()["usuario"]
 
 
+def _con_horario(cli, veterinario):
+    """Declara al veterinario disponible todo el día, todos los días: sin
+    franjas no se le puede agendar ninguna cita."""
+    for dia in range(7):
+        r = cli.post(
+            "/api/disponibilidades",
+            {"veterinario_id": veterinario["id"], "dia_semana": dia,
+             "hora_inicio": "00:00:00", "hora_fin": "23:59:00"},
+        )
+        assert r.status == 201, r
+    return veterinario
+
+
 # --------------------------------------------------------------------------
 def test_salud_y_catalogos():
     cli = nuevo_cliente()
@@ -234,7 +247,7 @@ def test_flujo_de_adopcion():
 
 def test_agenda_citas_e_historial():
     cli = nuevo_cliente()
-    vet = _crear(cli, "vet@test.com", "veterinario", documento="9876543")
+    vet = _con_horario(cli, _crear(cli, "vet@test.com", "veterinario", documento="9876543"))
     tutor = _crear(cli, "tutor2@test.com")
     especie = cli.get("/api/especies").json()[0]
 
@@ -719,8 +732,10 @@ def test_autorizacion_por_propietario():
     assert cli.get("/api/actividad", headers=h_ana).status == 403
 
 
-def _agenda_basica(cli):
+def _agenda_basica(cli, horario=True):
     vet = _crear(cli, "agenda-vet@test.com", "veterinario")
+    if horario:
+        _con_horario(cli, vet)
     tutor = _crear(cli, "agenda-tutor@test.com")
     especie = cli.get("/api/especies").json()[0]
     mascota = cli.post(
@@ -839,7 +854,7 @@ def test_produccion_exige_clave_propia():
 
 def test_historial_sin_cita():
     cli = nuevo_cliente()
-    vet = _crear(cli, "hist-vet@test.com", "veterinario")
+    vet = _con_horario(cli, _crear(cli, "hist-vet@test.com", "veterinario"))
     tutor = _crear(cli, "hist-tutor@test.com")
     especie = cli.get("/api/especies").json()[0]
     mascota = cli.post(
@@ -1342,7 +1357,7 @@ def _con_buzon(buzon):
 
 
 def _mascota_con_cita(cli, prefijo):
-    vet = _crear(cli, f"{prefijo}-vet@test.com", "veterinario")
+    vet = _con_horario(cli, _crear(cli, f"{prefijo}-vet@test.com", "veterinario"))
     tutor = _crear(cli, f"{prefijo}-tutor@test.com")
     especie = cli.get("/api/especies").json()[0]
     mascota = cli.post(
@@ -1429,7 +1444,7 @@ def test_fallo_del_correo_no_rompe_la_operacion():
 
 def test_campos_que_consume_el_frontend():
     cli = nuevo_cliente()
-    vet = _crear(cli, "campos-vet@test.com", "veterinario")
+    vet = _con_horario(cli, _crear(cli, "campos-vet@test.com", "veterinario"))
     tutor = _crear(cli, "campos-tutor@test.com", telefono="3001234567")
     especie = cli.get("/api/especies").json()[0]
     mascota = cli.post(
@@ -1511,12 +1526,18 @@ def test_servicio_con_precio_y_duracion():
 
 def test_la_duracion_del_servicio_ocupa_la_agenda():
     cli = nuevo_cliente()
-    vet, _tutor, base = _agenda_basica(cli)  # "Vacunación": 30 min por defecto
+    vet, _tutor, base = _agenda_basica(cli, horario=False)  # "Vacunación": 30 min por defecto
     larga = cli.post(
         "/api/servicios",
         {"nombre": "Cirugía", "precio": 150000, "duracion_min": 60, "veterinarios_ids": [vet["id"]]},
     ).json()
     manana = (datetime.now() + timedelta(days=1)).replace(hour=10, minute=0, second=0, microsecond=0)
+    franja = cli.post(
+        "/api/disponibilidades",
+        {"veterinario_id": vet["id"], "dia_semana": manana.weekday(),
+         "hora_inicio": "08:00:00", "hora_fin": "13:00:00"},
+    )
+    assert franja.status == 201, franja
     cita = cli.post(
         "/api/citas", {**base, "servicio_id": larga["id"], "fecha_hora": manana.isoformat()}
     )
@@ -1533,11 +1554,6 @@ def test_la_duracion_del_servicio_ocupa_la_agenda():
     assert despues.status == 201, despues
 
     # La cita tiene que caber entera en la franja del veterinario (8:00-13:00).
-    cli.post(
-        "/api/disponibilidades",
-        {"veterinario_id": vet["id"], "dia_semana": manana.weekday(),
-         "hora_inicio": "08:00:00", "hora_fin": "13:00:00"},
-    )
     no_cabe = cli.post(
         "/api/citas",
         {**base, "servicio_id": larga["id"], "fecha_hora": manana.replace(hour=12, minute=30).isoformat()},
@@ -1557,6 +1573,86 @@ def test_la_duracion_del_servicio_ocupa_la_agenda():
     # Para una cirugía (60 min) sólo quedan los huecos donde cabe entera.
     libres = cli.get(ruta, params={**dia, "servicio_id": larga["id"]}).json()
     assert libres == ["08:00", "08:30"], libres
+
+
+def test_sin_horario_declarado_no_se_agenda():
+    cli = nuevo_cliente()
+    vet, _tutor, base = _agenda_basica(cli, horario=False)
+    manana = (datetime.now() + timedelta(days=1)).replace(hour=10, minute=0, second=0, microsecond=0)
+    r = cli.post("/api/citas", {**base, "fecha_hora": manana.isoformat()})
+    assert r.status == 409 and "horario de atención" in r.json()["detail"], r
+    libres = cli.get(f"/api/veterinarios/{vet['id']}/agenda", params={"dia": manana.date().isoformat()})
+    assert libres.json() == [], libres
+
+
+def test_la_cita_cancelada_libera_su_hueco():
+    cli = nuevo_cliente()
+    vet, tutor, base = _agenda_basica(cli)
+    especie = cli.get("/api/especies").json()[0]
+    otra_mascota = cli.post(
+        "/api/mascotas",
+        {"cliente_id": tutor["id"], "especie_id": especie["id"], "nombre": "Nala",
+         "sexo": "Hembra", "color": "negro"},
+    ).json()
+    manana = (datetime.now() + timedelta(days=1)).replace(hour=10, minute=0, second=0, microsecond=0)
+    ruta_agenda = f"/api/veterinarios/{vet['id']}/agenda"
+    dia = {"dia": manana.date().isoformat()}
+
+    primera = cli.post("/api/citas", {**base, "fecha_hora": manana.isoformat()}).json()
+    assert "10:00" not in cli.get(ruta_agenda, params=dia).json()
+    cli.put(f"/api/citas/{primera['id']}/estado", {"estado": "Cancelada"})
+    # Antes una cita cancelada seguía bloqueando la hora.
+    assert "10:00" in cli.get(ruta_agenda, params=dia).json()
+    segunda = cli.post(
+        "/api/citas",
+        {**base, "mascota_id": otra_mascota["id"], "fecha_hora": manana.isoformat()},
+    )
+    assert segunda.status == 201, segunda
+
+    # Reactivar la cancelada exigiría ese hueco, que ya está ocupado.
+    r = cli.put(f"/api/citas/{primera['id']}/estado", {"estado": "Pendiente"})
+    assert r.status == 409, r
+    r = cli.put(f"/api/citas/{primera['id']}", {"estado": "Confirmada"})
+    assert r.status == 409, r
+    assert cli.get(f"/api/citas/{primera['id']}").json()["estado"] == "Cancelada"
+    # Si el hueco se libera, sí se puede reactivar.
+    cli.put(f"/api/citas/{segunda.json()['id']}/estado", {"estado": "Cancelada"})
+    r = cli.put(f"/api/citas/{primera['id']}/estado", {"estado": "Pendiente"})
+    assert r.status == 200 and r.json()["estado"] == "Pendiente", r
+
+
+def test_la_agenda_de_hoy_no_ofrece_horas_pasadas():
+    ruta = os.path.join(tempfile.mkdtemp(prefix="mundopeludo-hoy-"), "prueba.db")
+    app = create_app(Config(ruta_bd=ruta, secreto_jwt="s", exigir_auth=False, correo_host=""))
+    app.state.contenedor.servicios.reloj = _RelojFijo(datetime(2030, 6, 17, 10, 10))  # lunes
+    cli = crear_cliente(app)
+    vet = _crear(cli, "hoy-vet@test.com", "veterinario")
+    cli.post(
+        "/api/disponibilidades",
+        {"veterinario_id": vet["id"], "dia_semana": 0, "hora_inicio": "09:00:00", "hora_fin": "12:00:00"},
+    )
+    libres = cli.get(f"/api/veterinarios/{vet['id']}/agenda", params={"dia": "2030-06-17"}).json()
+    assert libres == ["10:30", "11:00", "11:30"], libres
+
+
+def test_cada_veterinario_gestiona_su_horario():
+    app, cli = cliente_con_auth()
+    _crear_directo(app, "jefa-horario@test.com", "administrador")
+    propio = _crear_directo(app, "doc-a@test.com", "veterinario")
+    ajeno = _crear_directo(app, "doc-b@test.com", "veterinario")
+    h_admin, h_vet = _token(cli, "jefa-horario@test.com"), _token(cli, "doc-a@test.com")
+    franja = {"dia_semana": 1, "hora_inicio": "09:00:00", "hora_fin": "13:00:00"}
+
+    r = cli.post("/api/disponibilidades", {**franja, "veterinario_id": ajeno}, headers=h_vet)
+    assert r.status == 403, r
+    suya = cli.post("/api/disponibilidades", {**franja, "veterinario_id": propio}, headers=h_vet)
+    assert suya.status == 201, suya
+    de_otro = cli.post("/api/disponibilidades", {**franja, "veterinario_id": ajeno}, headers=h_admin)
+    assert de_otro.status == 201, de_otro
+
+    assert cli.delete(f"/api/disponibilidades/{de_otro.json()['id']}", headers=h_vet).status == 403
+    assert cli.delete(f"/api/disponibilidades/{suya.json()['id']}", headers=h_vet).status == 204
+    assert cli.delete(f"/api/disponibilidades/{de_otro.json()['id']}", headers=h_admin).status == 204
 
 
 def test_migracion_anade_precio_y_duracion_a_servicios():

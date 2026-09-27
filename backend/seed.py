@@ -36,12 +36,20 @@ from app.application.use_cases.mascotas import (  # noqa: E402
     RegistrarMascota,
     RegistrarMascotaCmd,
 )
-from app.domain.model.cita import Servicio  # noqa: E402
+from app.domain.model.cita import Disponibilidad, Servicio  # noqa: E402
 from app.domain.model.usuario import Especialidad  # noqa: E402
 from app.infrastructure.notificaciones.adaptadores import NotificacionesEnRegistro  # noqa: E402
 from app.interfaces.http.deps import Contenedor  # noqa: E402
 
 PASSWORD_DEMO = "mundopeludo2025"
+
+
+def _proximo_dia_laborable(hora: int, minuto: int) -> datetime:
+    """Mañana (o el lunes, si mañana es domingo) a la hora indicada."""
+    dia = datetime.now() + timedelta(days=1)
+    if dia.weekday() == 6:
+        dia += timedelta(days=1)
+    return dia.replace(hour=hora, minute=minuto, second=0, microsecond=0)
 
 
 def poblar() -> None:
@@ -155,6 +163,19 @@ def poblar() -> None:
             )
             servicios[nombre] = servicio.id
 
+        # Horario de atención: sin franjas un veterinario no tiene horas libres.
+        for veterinario in (vet_garcia, vet_martinez):
+            for dia in range(6):  # lunes a sábado
+                for inicio, fin in (("09:00", "13:00"), ("15:00", "19:00")):
+                    repos.disponibilidades.crear(
+                        Disponibilidad(
+                            veterinario_id=veterinario.id,
+                            dia_semana=dia,
+                            hora_inicio=inicio,
+                            hora_fin=fin,
+                        )
+                    )
+
         # 4. Mascotas
         especies = {e.nombre: e.id for e in repos.especies.listar()}
         registrar_mascota = RegistrarMascota(
@@ -204,6 +225,7 @@ def poblar() -> None:
             repos.usuarios,
             repos.servicios,
             repos.disponibilidades,
+            repos.estados_cita,
             servicios_tec.reloj,
         )
         # Los datos de ejemplo usan correos ficticios: los avisos sólo se registran
@@ -218,7 +240,7 @@ def poblar() -> None:
                 mascota_id=luna.id,
                 veterinario_id=vet_garcia.id,
                 servicio_id=servicios["Consulta General"],
-                fecha_hora=datetime.now() + timedelta(days=1, hours=2),
+                fecha_hora=_proximo_dia_laborable(10, 30),
                 motivo="Control anual y refuerzo de vacunas",
                 estado="Confirmada",
             )

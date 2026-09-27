@@ -374,6 +374,7 @@ def reglas_de_agenda(repos: ReposDep, servicios: ServiciosDep) -> ReglasDeAgenda
         repos.usuarios,
         repos.servicios,
         repos.disponibilidades,
+        repos.estados_cita,
         servicios.reloj,
     )
 
@@ -418,16 +419,28 @@ def agendar_cita(repos: ReposDep, servicios: ServiciosDep, avisos: AvisosDep) ->
 AgendarCitaDep = Annotated[AgendarCita, Depends(agendar_cita)]
 
 
-def cambiar_estado_cita(repos: ReposDep, avisos: AvisosDep) -> CambiarEstadoCita:
-    return CambiarEstadoCita(repos.citas, repos.estados_cita, avisos_de_cita(repos, avisos))
+def cambiar_estado_cita(
+    repos: ReposDep, servicios: ServiciosDep, avisos: AvisosDep
+) -> CambiarEstadoCita:
+    return CambiarEstadoCita(
+        repos.citas,
+        repos.estados_cita,
+        reglas_de_agenda(repos, servicios),
+        avisos_de_cita(repos, avisos),
+    )
 
 
 CambiarEstadoCitaDep = Annotated[CambiarEstadoCita, Depends(cambiar_estado_cita)]
 
 
-def consultar_agenda_dia(repos: ReposDep) -> ConsultarAgendaDia:
+def consultar_agenda_dia(repos: ReposDep, servicios: ServiciosDep) -> ConsultarAgendaDia:
     return ConsultarAgendaDia(
-        repos.citas, repos.disponibilidades, repos.usuarios, repos.servicios
+        repos.citas,
+        repos.disponibilidades,
+        repos.usuarios,
+        repos.servicios,
+        repos.estados_cita,
+        servicios.reloj,
     )
 
 

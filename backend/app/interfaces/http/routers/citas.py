@@ -155,7 +155,10 @@ def crear_disponibilidad(
     datos: DisponibilidadIn,
     caso: DeclararDisponibilidadDep,
     consulta: ConsultarDisponibilidadDep,
+    acceso: AccesoDep,
 ) -> DisponibilidadOut:
+    # Un veterinario sólo declara su propio horario; el administrador, el de todos.
+    acceso.propietario(datos.veterinario_id, personal=False)
     creada = caso.ejecutar(
         datos.veterinario_id, datos.dia_semana, datos.hora_inicio, datos.hora_fin
     )
@@ -168,7 +171,14 @@ def crear_disponibilidad(
     summary="Eliminar una franja",
     dependencies=[SoloPersonal],
 )
-def eliminar_disponibilidad(disponibilidad_id: int, caso: EliminarDisponibilidadDep) -> None:
+def eliminar_disponibilidad(
+    disponibilidad_id: int,
+    caso: EliminarDisponibilidadDep,
+    consulta: ConsultarDisponibilidadDep,
+    acceso: AccesoDep,
+) -> None:
+    franja = consulta.obtener(disponibilidad_id).disponibilidad
+    acceso.propietario(franja.veterinario_id, personal=False)
     caso.ejecutar(disponibilidad_id)
 
 
