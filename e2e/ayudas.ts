@@ -59,6 +59,22 @@ export function fechaDentroDe(dias: number): string {
   return `${d.getFullYear()}-${dos(d.getMonth() + 1)}-${dos(d.getDate())}`;
 }
 
+/**
+ * Primer día laborable (lunes a sábado, el horario de seed.py) a partir de
+ * dentro de `dias` días.
+ */
+export function laborableDentroDe(dias: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + dias);
+  return fechaDentroDe(d.getDay() === 0 ? dias + 1 : dias);
+}
+
+/** Próximo domingo (nunca hoy): seed.py no da horario ese día. */
+export function proximoDomingo(): string {
+  const hoy = new Date().getDay();
+  return fechaDentroDe(hoy === 0 ? 7 : 7 - hoy);
+}
+
 /** Texto único por ejecución, para encontrar lo que crea cada prueba. */
 export function unico(prefijo: string): string {
   return `${prefijo} ${Date.now().toString(36)}`;

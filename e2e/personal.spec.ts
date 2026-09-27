@@ -4,8 +4,8 @@ import {
   crearMascotaEnAdopcion,
   CUENTAS,
   elegirOpcion,
-  fechaDentroDe,
   iniciarSesion,
+  laborableDentroDe,
   PNG_1PX,
   tarjetaCon,
   tokenDe,
@@ -36,8 +36,8 @@ test.describe('Personal de la clínica', () => {
     await elegirOpcion(page.locator('#select-cita-mascota'), 'Michi');
     await elegirOpcion(page.locator('#select-cita-servicio'), 'Vacunación');
     await elegirOpcion(page.locator('#select-cita-veterinario'), 'Andrea');
-    await page.locator('#input-cita-fecha').fill(fechaDentroDe(8));
-    await page.locator('#select-cita-hora').selectOption('11:15');
+    await page.locator('#input-cita-fecha').fill(laborableDentroDe(8));
+    await page.locator('#select-cita-hora').selectOption('11:30');
     await page.locator('#input-cita-motivo').fill(motivo);
     await page.locator('#btn-submit-cita').click();
 

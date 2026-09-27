@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { CUENTAS, elegirOpcion, fechaDentroDe, iniciarSesion, nombreUnico, tarjetaCon, unico } from './ayudas';
+import { CUENTAS, elegirOpcion, iniciarSesion, laborableDentroDe, nombreUnico, tarjetaCon, unico } from './ayudas';
 
 test.describe('Cliente (María, de seed.py)', () => {
   test.beforeEach(async ({ page }) => {
@@ -22,7 +22,7 @@ test.describe('Cliente (María, de seed.py)', () => {
     await elegirOpcion(page.locator('#select-cita-mascota'), 'Luna');
     await elegirOpcion(page.locator('#select-cita-servicio'), 'Consulta General');
     await elegirOpcion(page.locator('#select-cita-veterinario'), 'Andrea');
-    await page.locator('#input-cita-fecha').fill(fechaDentroDe(6));
+    await page.locator('#input-cita-fecha').fill(laborableDentroDe(6));
     await page.locator('#select-cita-hora').selectOption('10:30');
     await page.locator('#input-cita-motivo').fill(motivo);
     await page.locator('#btn-submit-cita').click();
