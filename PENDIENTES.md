@@ -13,7 +13,7 @@
 | 5 | Cierre de la primera lista de pendientes: imágenes de producto por archivo, precio y duración de servicios, `MP_EMAIL_REDIRIGIR_A`, 7 escenarios e2e nuevos, CI en GitHub Actions, base antigua fuera de git | ✅ Hecha (`9db066c` … `596e492`) |
 | 6 | Agenda: las citas canceladas liberan su hueco, sin horario declarado no se agenda, el formulario de citas ofrece las horas libres reales y pantalla de *Servicios y horarios* | ✅ Hecha |
 | 6b | Rediseño del frontend con la estética de los dashboards del Django en todo el sitio, sin datos inventados, accesible y sin desbordes en móvil | ✅ Hecha |
-| 7 | Despliegue: CI en verde (SQLite, PostgreSQL y e2e), soporte de PostgreSQL, FastAPI sirviendo la web, archivos de Heroku. Falta crear la app en Heroku (1) y rellenar los datos de la clínica (2) | 🔄 En curso |
+| 7 | Despliegue: CI en verde (SQLite, PostgreSQL y e2e), soporte de PostgreSQL, FastAPI sirviendo la web y **app publicada en Heroku**. Falta el primer administrador, el dyno Eco, renovar credenciales y cargar datos (1), y los datos de la clínica (2) | 🔄 En curso |
 
 Los números entre paréntesis remiten a la sección *Pendientes*.
 
@@ -65,11 +65,19 @@ Los números entre paréntesis remiten a la sección *Pendientes*.
 
 ## Pendientes
 
-### 1. Crear la app en Heroku
-Todo el código está listo (ver *Despliegue en Heroku* en el README). Falta lo
-que depende de la cuenta: CLI de Heroku instalada y `heroku login`, nombre de
-la app, región y el correo del primer administrador. Coste aproximado: dyno
-Eco (~5 USD/mes) + Heroku Postgres Essential-0 (~5 USD/mes).
+### 1. Terminar la puesta en producción (Heroku)
+La app está desplegada en https://mundopeludo-e6c6164f20a0.herokuapp.com
+(app `mundopeludo`, región EE. UU., Heroku Postgres Essential-0). Falta:
+- **Primer administrador:** `heroku run python backend/crear_superusuario.py -a mundopeludo`
+  (pide la contraseña: hay que ejecutarlo en una terminal propia).
+- **Dyno Eco:** la cuenta tiene que suscribirse a Eco (Billing); hoy corre en
+  Basic. Después: `heroku ps:type web=eco -a mundopeludo`.
+- **Renovar las credenciales de Postgres** (se compartieron en texto):
+  `heroku pg:credentials:rotate -a mundopeludo`. Heroku actualiza DATABASE_URL.
+- **Alta de veterinarios:** sólo se puede por la API (`POST /api/auth/register`
+  con el token del administrador, desde `/docs`); no hay pantalla. Sin
+  veterinarios con horario no se pueden agendar citas.
+- Cargar servicios, horarios y productos desde la app (o la API).
 
 ### 2. Datos públicos de la clínica
 `src/clinica.ts` tiene la dirección, el teléfono, el correo, el horario y las
