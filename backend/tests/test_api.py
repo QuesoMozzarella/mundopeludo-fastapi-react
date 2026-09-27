@@ -1150,7 +1150,9 @@ def test_entradas_fuera_de_rango_no_dan_500():
     enorme = 10**20
     assert cli.get(f"/api/mascotas/{enorme}").status in (404, 422)
     assert cli.get("/api/mascotas", params={"cliente_id": str(enorme)}).status == 422
-    assert cli.get("/api/citas", params={"desde": "-1"}).status == 422
+    # "-1" es un timestamp (1969): en Windows no se convierte (422) y en Linux sí
+    # (200). Lo que importa es que nunca sea un 500.
+    assert cli.get("/api/citas", params={"desde": "-1"}).status in (200, 422)
     for token in ("ñññ.b.c", "a.ñ.c", "a" * 5000):
         r = cli.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
         assert r.status == 401, (token[:10], r)

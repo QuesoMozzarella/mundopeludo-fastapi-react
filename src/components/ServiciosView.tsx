@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Disponibilidad, Servicio, User } from '../types';
 import {
   ServicioDatos,
@@ -159,11 +159,17 @@ export const ServiciosView: React.FC<ServiciosViewProps> = ({
     if (esAdmin && !vetHorario && veterinarios.length) setVetHorario(veterinarios[0].id);
   }, [veterinarios]);
 
+  // Sólo vale la última consulta: si una anterior responde tarde (p. ej. la
+  // del cambio de veterinario tras añadir una franja), no pisa la lista nueva.
+  const ultimaConsulta = useRef(0);
   const cargarFranjas = async () => {
     if (!vetHorario) return;
+    const consulta = ++ultimaConsulta.current;
     try {
-      setFranjas(await fetchDisponibilidades(vetHorario));
+      const datos = await fetchDisponibilidades(vetHorario);
+      if (consulta === ultimaConsulta.current) setFranjas(datos);
     } catch (err: any) {
+      if (consulta !== ultimaConsulta.current) return;
       setFranjas([]);
       setErrorHorario(err.message || 'No se pudo cargar el horario.');
     }
