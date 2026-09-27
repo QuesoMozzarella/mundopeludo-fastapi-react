@@ -128,12 +128,22 @@ class Repositorios:
     codigos: CodigoRecuperacionRepository
 
 
+def _base_de_datos(config: Config):
+    """PostgreSQL si hay `DATABASE_URL` (Heroku); si no, el archivo SQLite."""
+    if config.url_bd:
+        # Import perezoso: psycopg sólo hace falta cuando se usa PostgreSQL.
+        from ...infrastructure.db.postgres import DatabasePostgres
+
+        return DatabasePostgres(config.url_bd, config.conexiones_bd)
+    return Database(config.ruta_bd)
+
+
 class Contenedor:
     """Guarda la base de datos y los servicios compartidos de la aplicación."""
 
     def __init__(self, configuracion: Config | None = None):
         self.config = configuracion or config_global
-        self.db = Database(self.config.ruta_bd)
+        self.db = _base_de_datos(self.config)
         self.servicios = Servicios(
             hasher=Pbkdf2PasswordHasher(),
             tokens=JwtTokenService(self.config.secreto_jwt, self.config.minutos_token),
@@ -235,7 +245,11 @@ def obtener_repos(request: Request, bandeja: BandejaDep) -> Iterator[Repositorio
     contenedor.enviar_avisos(bandeja)
 
 
-ReposDep = Annotated[Repositorios, Depends(obtener_repos)]
+# scope="function": el commit ocurre ANTES de enviar la respuesta. Con el
+# valor por defecto de FastAPI ("request") se hacía después, y el cliente que
+# pedía algo recién creado (el usuario tras registrarse, el producto para
+# subirle la foto) podía llegar antes que el commit y no encontrarlo.
+ReposDep = Annotated[Repositorios, Depends(obtener_repos, scope="function")]
 ServiciosDep = Annotated[Servicios, Depends(obtener_servicios)]
 ConfigDep = Annotated[Config, Depends(obtener_config)]
 

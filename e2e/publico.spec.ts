@@ -8,7 +8,8 @@ test.describe('Visitante sin sesión', () => {
     await expect(page.locator('#btn-iniciar-sesion')).toBeVisible();
     // Servicios y productos vienen de la API (sembrados por seed.py).
     await expect(page.getByText('Consulta General').first()).toBeVisible();
-    await expect(page.getByText('Juguete Mordedor Hueso').first()).toBeVisible();
+    // El inicio destaca 4 productos en orden alfabético: el primero siempre sale.
+    await expect(page.getByText('Alimento Premium para Perros 15kg').first()).toBeVisible();
     // Precio y duración de los servicios (los recuperó la API; seed.py los rellena).
     await expect(page.getByText('120 min', { exact: true })).toBeVisible();
     await expect(page.getByText('$150.000')).toBeVisible();
