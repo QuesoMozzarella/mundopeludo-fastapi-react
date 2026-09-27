@@ -178,9 +178,14 @@ def eliminar_disponibilidad(disponibilidad_id: int, caso: EliminarDisponibilidad
     summary="Horas libres de un veterinario en un día",
 )
 def agenda_dia(
-    veterinario_id: int, caso: ConsultarAgendaDiaDep, dia: date = Query(...)
+    veterinario_id: int,
+    caso: ConsultarAgendaDiaDep,
+    dia: date = Query(...),
+    servicio_id: int | None = Query(
+        default=None, description="Sólo huecos donde cabe una cita de este servicio"
+    ),
 ) -> list[str]:
-    return caso.ejecutar(veterinario_id, dia)
+    return caso.ejecutar(veterinario_id, dia, servicio_id)
 
 
 # -------------------------------- citas --------------------------------

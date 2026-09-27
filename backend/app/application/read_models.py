@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
 
-from ..domain.model.cita import Cita, Disponibilidad, Servicio
+from ..domain.model.cita import DURACION_POR_DEFECTO, Cita, Disponibilidad, Servicio
 from ..domain.model.historial import HistorialMedico
 from ..domain.model.inventario import Carrito, CarritoItem, Producto
 from ..domain.model.mascota import Mascota, SolicitudAdopcion
@@ -72,6 +72,8 @@ class CitaVista:
     cliente_telefono: str | None = None
     veterinario_nombre: str = ""
     servicio_nombre: str = ""
+    servicio_precio: Decimal | None = None
+    servicio_duracion_min: int = DURACION_POR_DEFECTO
     estado_nombre: str = ""
     tiene_historial: bool = False
 

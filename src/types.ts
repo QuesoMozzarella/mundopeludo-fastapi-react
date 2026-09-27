@@ -27,9 +27,9 @@ export interface Servicio {
   id: number;
   nombre: string;
   descripcion: string;
-  // El backend no los expone: la migracion 0007 de Django los elimino del
-  // modelo Servicio. Solo llegan desde los datos semilla del frontend.
-  duracion_min?: number;
+  // Minutos de agenda que ocupa cada cita del servicio.
+  duracion_min: number;
+  // Sin precio publicado, no llega.
   precio?: number;
   activo: number;
 }
@@ -103,7 +103,8 @@ export interface Cita {
   vet_apellidos: string;
   vet_especialidad?: string;
   servicio_nombre: string;
-  servicio_precio: number;
+  servicio_precio?: number;
+  servicio_duracion_min: number;
 }
 
 export interface HistorialMedico {

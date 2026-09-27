@@ -14,7 +14,7 @@ from ...domain.ports.repositories import (
     ServicioRepository,
 )
 from ...domain.value_objects import DiaSemana
-from ._comun import RepositorioSQLite, a_bool, a_datetime, a_time
+from ._comun import RepositorioSQLite, a_bool, a_datetime, a_decimal, a_time
 
 
 class SqliteEstadoCitaRepository(RepositorioSQLite, EstadoCitaRepository):
@@ -64,6 +64,8 @@ class SqliteServicioRepository(RepositorioSQLite, ServicioRepository):
             nombre=fila["nombre"],
             descripcion=fila["descripcion"],
             activo=a_bool(fila["activo"]),
+            precio=a_decimal(fila["precio"]) if fila["precio"] is not None else None,
+            duracion_min=fila["duracion_min"],
             veterinarios_ids=[
                 f["veterinario_id"]
                 for f in self._todos(
@@ -96,16 +98,31 @@ class SqliteServicioRepository(RepositorioSQLite, ServicioRepository):
 
     def crear(self, servicio: Servicio) -> Servicio:
         servicio.id = self._insertar(
-            "INSERT INTO servicios (nombre, descripcion, activo) VALUES (?,?,?)",
-            (servicio.nombre, servicio.descripcion, int(servicio.activo)),
+            """INSERT INTO servicios (nombre, descripcion, activo, precio, duracion_min)
+               VALUES (?,?,?,?,?)""",
+            (
+                servicio.nombre,
+                servicio.descripcion,
+                int(servicio.activo),
+                servicio.precio,
+                servicio.duracion_min,
+            ),
         )
         self._guardar_m2m(servicio)
         return servicio
 
     def actualizar(self, servicio: Servicio) -> Servicio:
         self._ejecutar(
-            "UPDATE servicios SET nombre=?, descripcion=?, activo=? WHERE id=?",
-            (servicio.nombre, servicio.descripcion, int(servicio.activo), servicio.id),
+            """UPDATE servicios SET nombre=?, descripcion=?, activo=?, precio=?, duracion_min=?
+               WHERE id=?""",
+            (
+                servicio.nombre,
+                servicio.descripcion,
+                int(servicio.activo),
+                servicio.precio,
+                servicio.duracion_min,
+                servicio.id,
+            ),
         )
         self._guardar_m2m(servicio)
         return servicio

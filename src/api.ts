@@ -143,7 +143,7 @@ function aMascota(m: Json): Mascota {
 }
 
 function aServicio(s: Json): Servicio {
-  return { ...s, activo: num(s.activo) } as Servicio;
+  return { ...s, precio: s.precio ?? undefined, activo: num(s.activo) } as Servicio;
 }
 
 function aCita(c: Json): Cita {
@@ -158,7 +158,7 @@ function aCita(c: Json): Cita {
     mascota_imagen: c.mascota_imagen_url ?? undefined,
     vet_nombre: c.veterinario_nombre,
     vet_apellidos: '',
-    servicio_precio: 0
+    servicio_precio: c.servicio_precio ?? undefined
   } as Cita;
 }
 

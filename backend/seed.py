@@ -137,16 +137,18 @@ def poblar() -> None:
 
         # 3. Servicios (los estados de cita y las especies vienen del esquema)
         servicios = {}
-        for nombre, descripcion, vets, esps in [
-            ("Consulta General", "Evaluación clínica integral", [vet_garcia.id, vet_martinez.id], ["medicina_interna"]),
-            ("Vacunación", "Aplicación de vacunas y refuerzos", [vet_garcia.id, vet_martinez.id], []),
-            ("Cirugía", "Procedimientos quirúrgicos programados", [vet_garcia.id], ["cirugia"]),
-            ("Dermatología", "Tratamiento de afecciones de la piel", [vet_martinez.id], ["dermatologia"]),
+        for nombre, descripcion, precio, minutos, vets, esps in [
+            ("Consulta General", "Evaluación clínica integral", "25000", 30, [vet_garcia.id, vet_martinez.id], ["medicina_interna"]),
+            ("Vacunación", "Aplicación de vacunas y refuerzos", "18000", 20, [vet_garcia.id, vet_martinez.id], []),
+            ("Cirugía", "Procedimientos quirúrgicos programados", "150000", 120, [vet_garcia.id], ["cirugia"]),
+            ("Dermatología", "Tratamiento de afecciones de la piel", "32000", 45, [vet_martinez.id], ["dermatologia"]),
         ]:
             servicio = repos.servicios.crear(
                 Servicio(
                     nombre=nombre,
                     descripcion=descripcion,
+                    precio=Decimal(precio),
+                    duracion_min=minutos,
                     veterinarios_ids=vets,
                     especialidades_ids=[especialidades[e] for e in esps],
                 )

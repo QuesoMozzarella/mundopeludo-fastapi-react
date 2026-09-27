@@ -1427,6 +1427,102 @@ def test_campos_que_consume_el_frontend():
     assert solicitud["cliente_telefono"] == "3001234567", solicitud
 
 
+def test_servicio_con_precio_y_duracion():
+    cli = nuevo_cliente()
+    vet = _crear(cli, "precio-vet@test.com", "veterinario")
+    por_defecto = cli.post("/api/servicios", {"nombre": "Control"}).json()
+    assert por_defecto["precio"] is None and por_defecto["duracion_min"] == 30, por_defecto
+
+    r = cli.post(
+        "/api/servicios",
+        {"nombre": "Cirugía menor", "precio": 89990.5, "duracion_min": 90,
+         "veterinarios_ids": [vet["id"]]},
+    )
+    assert r.status == 201, r
+    servicio = r.json()
+    assert servicio["precio"] == 89990.5 and servicio["duracion_min"] == 90, servicio
+
+    for malo in ({"duracion_min": 0}, {"duracion_min": 481}, {"precio": -1}):
+        r = cli.post("/api/servicios", {"nombre": "Malo", **malo})
+        assert r.status == 422, (malo, r)
+
+    ruta = f"/api/servicios/{servicio['id']}"
+    # `duracion_min: null` no la cambia; `precio: null` retira el precio.
+    r = cli.put(ruta, {"duracion_min": None, "precio": None})
+    assert r.status == 200 and r.json()["duracion_min"] == 90 and r.json()["precio"] is None, r
+    r = cli.put(ruta, {"precio": 95000, "duracion_min": 60})
+    assert r.json()["precio"] == 95000 and r.json()["duracion_min"] == 60, r
+    listado = {s["id"]: s for s in cli.get("/api/servicios").json()}
+    assert listado[servicio["id"]]["precio"] == 95000, listado
+
+
+def test_la_duracion_del_servicio_ocupa_la_agenda():
+    cli = nuevo_cliente()
+    vet, _tutor, base = _agenda_basica(cli)  # "Vacunación": 30 min por defecto
+    larga = cli.post(
+        "/api/servicios",
+        {"nombre": "Cirugía", "precio": 150000, "duracion_min": 60, "veterinarios_ids": [vet["id"]]},
+    ).json()
+    manana = (datetime.now() + timedelta(days=1)).replace(hour=10, minute=0, second=0, microsecond=0)
+    cita = cli.post(
+        "/api/citas", {**base, "servicio_id": larga["id"], "fecha_hora": manana.isoformat()}
+    )
+    assert cita.status == 201, cita
+    assert cita.json()["servicio_precio"] == 150000 and cita.json()["servicio_duracion_min"] == 60
+
+    # Antes cualquier cita a 30 min o más no se pisaba; ahora la cirugía dura una hora.
+    en_medio = cli.post("/api/citas", {**base, "fecha_hora": (manana + timedelta(minutes=45)).isoformat()})
+    assert en_medio.status == 409, en_medio
+    # Una de 30 min que acaba justo cuando empieza la cirugía, o que empieza al terminar, sí cabe.
+    antes = cli.post("/api/citas", {**base, "fecha_hora": (manana - timedelta(minutes=30)).isoformat()})
+    assert antes.status == 201, antes
+    despues = cli.post("/api/citas", {**base, "fecha_hora": (manana + timedelta(hours=1)).isoformat()})
+    assert despues.status == 201, despues
+
+    # La cita tiene que caber entera en la franja del veterinario (8:00-13:00).
+    cli.post(
+        "/api/disponibilidades",
+        {"veterinario_id": vet["id"], "dia_semana": manana.weekday(),
+         "hora_inicio": "08:00:00", "hora_fin": "13:00:00"},
+    )
+    no_cabe = cli.post(
+        "/api/citas",
+        {**base, "servicio_id": larga["id"], "fecha_hora": manana.replace(hour=12, minute=30).isoformat()},
+    )
+    assert no_cabe.status == 409 and "60 min" in no_cabe.json()["detail"], no_cabe
+    cabe = cli.post(
+        "/api/citas",
+        {**base, "servicio_id": larga["id"], "fecha_hora": manana.replace(hour=12).isoformat()},
+    )
+    assert cabe.status == 201, cabe
+
+    # Agenda del día: 09:30-11:30 y 12:00-13:00 ocupados.
+    ruta = f"/api/veterinarios/{vet['id']}/agenda"
+    dia = {"dia": manana.date().isoformat()}
+    libres = cli.get(ruta, params=dia).json()
+    assert libres == ["08:00", "08:30", "09:00", "11:30"], libres
+    # Para una cirugía (60 min) sólo quedan los huecos donde cabe entera.
+    libres = cli.get(ruta, params={**dia, "servicio_id": larga["id"]}).json()
+    assert libres == ["08:00", "08:30"], libres
+
+
+def test_migracion_anade_precio_y_duracion_a_servicios():
+    import sqlite3
+
+    ruta = os.path.join(tempfile.mkdtemp(prefix="mundopeludo-migra-"), "vieja.db")
+    config = Config(ruta_bd=ruta, secreto_jwt="secreto", exigir_auth=False, correo_host="")
+    crear_cliente(create_app(config)).post("/api/servicios", {"nombre": "Consulta antigua"})
+    # Una base de antes de este cambio: la tabla sin las dos columnas.
+    with sqlite3.connect(ruta) as conexion:
+        conexion.execute("ALTER TABLE servicios DROP COLUMN precio")
+        conexion.execute("ALTER TABLE servicios DROP COLUMN duracion_min")
+
+    servicios = crear_cliente(create_app(config)).get("/api/servicios").json()
+    assert [(s["nombre"], s["precio"], s["duracion_min"]) for s in servicios] == [
+        ("Consulta antigua", None, 30)
+    ], servicios
+
+
 def _ejecutar_todo() -> int:
     pruebas = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     fallos = 0

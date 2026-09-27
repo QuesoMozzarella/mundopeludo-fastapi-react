@@ -5,10 +5,15 @@ Modelos Django originales: EstadoCita, Servicio, Disponibilidad, Cita.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
+from decimal import Decimal
 
 from ..errors import ValidationError
-from ..value_objects import DiaSemana, hora_local
+from ..value_objects import DiaSemana, dinero, hora_local
+
+DURACION_POR_DEFECTO = 30  # minutos: lo que ocupaba toda cita antes de recuperar la duracion
+DURACION_MINIMA = 5
+DURACION_MAXIMA = 8 * 60
 
 
 @dataclass
@@ -35,13 +40,17 @@ class EstadoCita:
 class Servicio:
     """Servicio con sus dos M2M: veterinarios habilitados y especialidades.
 
-    Nota de fidelidad: la migracion 0007 elimino `precio` y `duracion` del
-    modelo Django, asi que aqui tampoco existen.
+    `precio` y `duracion_min` existian en el modelo Django hasta la migracion
+    0007, que los elimino; aqui se recuperan. El precio es opcional (un
+    servicio puede no tenerlo publicado) y la duracion decide cuanto tiempo de
+    la agenda ocupa cada cita.
     """
 
     nombre: str
     descripcion: str | None = None
     activo: bool = True
+    precio: Decimal | None = None
+    duracion_min: int = DURACION_POR_DEFECTO
     veterinarios_ids: list[int] = field(default_factory=list)
     especialidades_ids: list[int] = field(default_factory=list)
     id: int | None = None
@@ -54,6 +63,11 @@ class Servicio:
             raise ValidationError("El nombre del servicio no puede superar 100 caracteres", "nombre")
         self.nombre = nombre
         self.descripcion = (self.descripcion or "").strip() or None
+        if self.precio is not None:
+            self.precio = dinero(self.precio, campo="precio")
+            if self.precio < 0:
+                raise ValidationError("El precio no puede ser negativo", "precio")
+        self.duracion_min = _duracion(self.duracion_min)
         self.veterinarios_ids = sorted({int(i) for i in self.veterinarios_ids})
         self.especialidades_ids = sorted({int(i) for i in self.especialidades_ids})
 
@@ -89,10 +103,15 @@ class Disponibilidad:
     def dia_etiqueta(self) -> str:
         return self.dia_semana.etiqueta
 
-    def cubre(self, momento: datetime) -> bool:
+    def cubre(self, momento: datetime, minutos: int = 0) -> bool:
+        """La franja contiene `momento` y, si se indica, los `minutos` siguientes."""
         if momento.weekday() != self.dia_semana.value:
             return False
-        return self.hora_inicio <= momento.time() < self.hora_fin
+        inicio = datetime.combine(momento.date(), self.hora_inicio)
+        fin = datetime.combine(momento.date(), self.hora_fin)
+        if not inicio <= momento < fin:
+            return False
+        return momento + timedelta(minutes=minutos) <= fin
 
     def se_solapa_con(self, otra: "Disponibilidad") -> bool:
         if otra.veterinario_id != self.veterinario_id:
@@ -100,6 +119,19 @@ class Disponibilidad:
         if otra.dia_semana is not self.dia_semana:
             return False
         return self.hora_inicio < otra.hora_fin and otra.hora_inicio < self.hora_fin
+
+
+def _duracion(valor) -> int:
+    try:
+        minutos = int(valor)
+    except (TypeError, ValueError):
+        raise ValidationError("La duracion debe ser un numero de minutos", "duracion_min") from None
+    if not DURACION_MINIMA <= minutos <= DURACION_MAXIMA:
+        raise ValidationError(
+            f"La duracion debe estar entre {DURACION_MINIMA} y {DURACION_MAXIMA} minutos",
+            "duracion_min",
+        )
+    return minutos
 
 
 def _hora(valor, campo: str) -> time:
@@ -152,12 +184,32 @@ class Cita:
     def cambiar_estado(self, estado_id: int) -> None:
         self.estado_id = int(estado_id)
 
-    def se_solapa_con(self, otra: "Cita", minutos: int = 30) -> bool:
-        """Dos citas del mismo veterinario a menos de N minutos se pisan."""
+    def se_solapa_con(
+        self,
+        otra: "Cita",
+        minutos: int = DURACION_POR_DEFECTO,
+        minutos_otra: int | None = None,
+    ) -> bool:
+        """Dos citas del mismo veterinario se pisan si sus intervalos se cruzan.
+
+        `minutos` es lo que dura esta cita y `minutos_otra` lo que dura la
+        otra (por defecto, lo mismo): cada una ocupa [inicio, inicio + duracion).
+        """
         if otra.veterinario_id != self.veterinario_id or otra.id == self.id:
             return False
-        delta = abs((otra.fecha_hora - self.fecha_hora).total_seconds())
-        return delta < minutos * 60
+        return se_cruzan(
+            self.fecha_hora,
+            minutos,
+            otra.fecha_hora,
+            minutos if minutos_otra is None else minutos_otra,
+        )
+
+
+def se_cruzan(inicio: datetime, minutos: int, otro_inicio: datetime, otros_minutos: int) -> bool:
+    """Los intervalos [inicio, inicio + minutos) y [otro_inicio, ...) se cruzan."""
+    fin = inicio + timedelta(minutes=minutos)
+    otro_fin = otro_inicio + timedelta(minutes=otros_minutos)
+    return inicio < otro_fin and otro_inicio < fin
 
 
 def _fecha_hora(valor) -> datetime:

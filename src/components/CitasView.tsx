@@ -225,7 +225,13 @@ export const CitasView: React.FC<CitasViewProps> = ({
                 <div className="bg-slate-50 rounded-xl p-3 space-y-1.5 text-xs text-slate-700 mb-4">
                   <div className="flex items-center justify-between">
                     <span className="font-semibold text-slate-500">Servicio:</span>
-                    <span className="font-bold text-slate-900">{cita.servicio_nombre}</span>
+                    <span className="font-bold text-slate-900">
+                      {cita.servicio_nombre}
+                      <span className="font-normal text-slate-500">
+                        {' '}({cita.servicio_duracion_min} min
+                        {cita.servicio_precio != null && ` · $${cita.servicio_precio.toLocaleString('es-CL')}`})
+                      </span>
+                    </span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="font-semibold text-slate-500">Especialista:</span>
@@ -349,7 +355,7 @@ export const CitasView: React.FC<CitasViewProps> = ({
                     <option key={s.id} value={s.id}>
                       {s.nombre}
                       {s.precio != null && ` - $${s.precio.toLocaleString('es-CL')}`}
-                      {s.duracion_min != null && ` (${s.duracion_min} min)`}
+                      {` (${s.duracion_min} min)`}
                     </option>
                   ))}
                 </select>

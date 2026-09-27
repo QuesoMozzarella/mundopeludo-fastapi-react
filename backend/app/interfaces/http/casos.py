@@ -426,7 +426,9 @@ CambiarEstadoCitaDep = Annotated[CambiarEstadoCita, Depends(cambiar_estado_cita)
 
 
 def consultar_agenda_dia(repos: ReposDep) -> ConsultarAgendaDia:
-    return ConsultarAgendaDia(repos.citas, repos.disponibilidades, repos.usuarios)
+    return ConsultarAgendaDia(
+        repos.citas, repos.disponibilidades, repos.usuarios, repos.servicios
+    )
 
 
 ConsultarAgendaDiaDep = Annotated[ConsultarAgendaDia, Depends(consultar_agenda_dia)]

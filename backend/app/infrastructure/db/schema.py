@@ -121,11 +121,14 @@ CREATE TABLE IF NOT EXISTS estados_cita (
 );
 
 -- ===================== citas.Servicio =====================
+-- precio y duracion_min se recuperan (la migración 0007 de Django los quitó).
 CREATE TABLE IF NOT EXISTS servicios (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    nombre      TEXT    NOT NULL,
-    descripcion TEXT,
-    activo      INTEGER NOT NULL DEFAULT 1
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    nombre       TEXT    NOT NULL,
+    descripcion  TEXT,
+    activo       INTEGER NOT NULL DEFAULT 1,
+    precio       REAL    CHECK (precio IS NULL OR precio >= 0),
+    duracion_min INTEGER NOT NULL DEFAULT 30 CHECK (duracion_min > 0)
 );
 
 -- M2M Servicio.veterinarios
@@ -349,6 +352,14 @@ def migrar(conn) -> None:
         # v3 → v4: descripción e imagen de la mascota (las pide el frontend).
         conn.execute("ALTER TABLE mascotas ADD COLUMN descripcion TEXT")
         conn.execute("ALTER TABLE mascotas ADD COLUMN imagen_url TEXT")
+    servicios = _columnas(conn, "servicios")
+    if servicios and "duracion_min" not in servicios:
+        # v4 → v5: precio y duración del servicio. Los existentes quedan sin
+        # precio y con los 30 minutos que ocupaba hasta ahora cada cita.
+        conn.execute("ALTER TABLE servicios ADD COLUMN precio REAL")
+        conn.execute(
+            "ALTER TABLE servicios ADD COLUMN duracion_min INTEGER NOT NULL DEFAULT 30"
+        )
     historiales = _columnas(conn, "historiales_medicos")
     if historiales and "mascota_id" not in historiales:
         # v1 → v2: la cita del historial pasa a ser opcional.

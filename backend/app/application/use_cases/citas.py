@@ -3,9 +3,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
+from decimal import Decimal
 
 from ...domain.errors import BusinessRuleError, ConflictError, NotFoundError, ValidationError
-from ...domain.model.cita import Cita, Disponibilidad, EstadoCita, Servicio
+from ...domain.model.cita import (
+    DURACION_POR_DEFECTO,
+    Cita,
+    Disponibilidad,
+    EstadoCita,
+    Servicio,
+    se_cruzan,
+)
 from ...domain.model.usuario import Usuario
 from ...domain.ports.repositories import (
     CitaRepository,
@@ -22,7 +30,7 @@ from ...domain.value_objects import hora_local
 from ..cambios import SIN_CAMBIO, Cambio, enviado, nuevo, nuevo_o_vacio
 from ..read_models import CitaVista, DisponibilidadVista, ServicioVista
 
-MINUTOS_ENTRE_CITAS = 30
+MINUTOS_ENTRE_CITAS = 30  # separación entre los huecos que ofrece la agenda del día
 ESTADO_CONFIRMADA = "Confirmada"
 ESTADO_CANCELADA = "Cancelada"
 
@@ -33,6 +41,8 @@ class CrearServicioCmd:
     nombre: str
     descripcion: str | None = None
     activo: bool = True
+    precio: Decimal | None = None
+    duracion_min: int = DURACION_POR_DEFECTO
     veterinarios_ids: list[int] = field(default_factory=list)
     especialidades_ids: list[int] = field(default_factory=list)
 
@@ -42,6 +52,8 @@ class ActualizarServicioCmd:
     nombre: Cambio[str | None] = SIN_CAMBIO
     descripcion: Cambio[str | None] = SIN_CAMBIO
     activo: Cambio[bool | None] = SIN_CAMBIO
+    precio: Cambio[Decimal | None] = SIN_CAMBIO
+    duracion_min: Cambio[int | None] = SIN_CAMBIO
     veterinarios_ids: Cambio[list[int] | None] = SIN_CAMBIO
     especialidades_ids: Cambio[list[int] | None] = SIN_CAMBIO
 
@@ -181,6 +193,8 @@ class CrearServicio:
                 nombre=cmd.nombre,
                 descripcion=cmd.descripcion,
                 activo=cmd.activo,
+                precio=cmd.precio,
+                duracion_min=cmd.duracion_min,
                 veterinarios_ids=_validar_veterinarios(self.usuarios, cmd.veterinarios_ids),
                 especialidades_ids=_validar_especialidades(
                     self.especialidades, cmd.especialidades_ids
@@ -207,6 +221,8 @@ class ActualizarServicio:
             nombre=nuevo(cmd.nombre, actual.nombre),
             descripcion=nuevo_o_vacio(cmd.descripcion, actual.descripcion),
             activo=nuevo(cmd.activo, actual.activo),
+            precio=nuevo_o_vacio(cmd.precio, actual.precio),
+            duracion_min=nuevo(cmd.duracion_min, actual.duracion_min),
             veterinarios_ids=(
                 _validar_veterinarios(self.usuarios, cmd.veterinarios_ids)
                 if enviado(cmd.veterinarios_ids)
@@ -359,6 +375,8 @@ class ConsultarCitas:
             cliente_telefono=cliente.telefono if cliente else None,
             veterinario_nombre=veterinario.nombre_completo if veterinario else "",
             servicio_nombre=servicio.nombre if servicio else "",
+            servicio_precio=servicio.precio if servicio else None,
+            servicio_duracion_min=servicio.duracion_min if servicio else DURACION_POR_DEFECTO,
             estado_nombre=estado.nombre if estado else "",
             tiene_historial=self.historiales.obtener_por_cita(cita.id) is not None,
         )
@@ -408,24 +426,46 @@ class ReglasDeAgenda:
             )
         return servicio
 
-    def horario(self, cita: Cita) -> None:
+    def horario(self, cita: Cita, servicio: Servicio) -> None:
+        """Cada cita ocupa la duración de su servicio: no puede pisar otra ni
+        salirse de la franja declarada del veterinario."""
         if cita.fecha_hora < self.reloj.ahora():
             raise BusinessRuleError("No se puede agendar una cita en el pasado")
 
+        duraciones = _Duraciones(self.servicios)
         agenda = self.citas.listar_por_veterinario_y_dia(
             cita.veterinario_id, cita.fecha_hora.date()
         )
         for existente in agenda:
-            if cita.se_solapa_con(existente, MINUTOS_ENTRE_CITAS):
+            if cita.se_solapa_con(
+                existente, servicio.duracion_min, duraciones.de(existente.servicio_id)
+            ):
                 raise ConflictError(
                     f"El veterinario ya tiene una cita a las {existente.fecha_hora:%H:%M}"
                 )
 
         franjas = self.disponibilidades.listar(cita.veterinario_id)
-        if franjas and not any(f.cubre(cita.fecha_hora) for f in franjas):
+        if franjas and not any(f.cubre(cita.fecha_hora, servicio.duracion_min) for f in franjas):
             raise BusinessRuleError(
                 "El horario está fuera de la disponibilidad declarada del veterinario"
+                f" (el servicio dura {servicio.duracion_min} min)"
             )
+
+
+class _Duraciones:
+    """Duración de cada servicio, leída una sola vez por consulta."""
+
+    def __init__(self, servicios: ServicioRepository):
+        self.servicios = servicios
+        self._cache: dict[int, int] = {}
+
+    def de(self, servicio_id: int) -> int:
+        if servicio_id not in self._cache:
+            servicio = self.servicios.obtener(servicio_id)
+            self._cache[servicio_id] = (
+                servicio.duracion_min if servicio else DURACION_POR_DEFECTO
+            )
+        return self._cache[servicio_id]
 
 
 def _resolver_estado(estados: EstadoCitaRepository, estado_id, nombre) -> EstadoCita:
@@ -534,7 +574,7 @@ class AgendarCita:
             motivo=cmd.motivo,
             notas=cmd.notas,
         )
-        self.reglas.horario(cita)
+        self.reglas.horario(cita, servicio)
         cita = self.citas.crear(cita)
         # Una cita puede nacer ya confirmada (p. ej. la agenda el personal).
         self.avisos.tras_cambio_de_estado(cita, estado_anterior_id=None)
@@ -582,8 +622,8 @@ class ActualizarCita:
             or actualizada.fecha_hora != actual.fecha_hora
         ):
             veterinario = self.reglas.veterinario(actualizada.veterinario_id)
-            self.reglas.servicio(actualizada.servicio_id, veterinario)
-            self.reglas.horario(actualizada)
+            servicio = self.reglas.servicio(actualizada.servicio_id, veterinario)
+            self.reglas.horario(actualizada, servicio)
         actualizada = self.citas.actualizar(actualizada)
         self.avisos.tras_cambio_de_estado(actualizada, actual.estado_id)
         return actualizada
@@ -623,35 +663,53 @@ def _cita_o_error(citas: CitaRepository, cita_id: int) -> Cita:
 
 
 class ConsultarAgendaDia:
-    """Horas libres de un veterinario en un día, según sus franjas."""
+    """Horas libres de un veterinario en un día, según sus franjas.
+
+    Un hueco está libre si una cita del servicio indicado (o de la duración
+    por defecto) cabe entera en la franja sin pisar ninguna de las ya
+    agendadas, con la duración de sus propios servicios.
+    """
 
     def __init__(
         self,
         citas: CitaRepository,
         disponibilidades: DisponibilidadRepository,
         usuarios: UsuarioRepository,
+        servicios: ServicioRepository,
     ):
         self.citas = citas
         self.disponibilidades = disponibilidades
         self.usuarios = usuarios
+        self.servicios = servicios
 
-    def ejecutar(self, veterinario_id: int, dia: date) -> list[str]:
+    def ejecutar(
+        self, veterinario_id: int, dia: date, servicio_id: int | None = None
+    ) -> list[str]:
         if self.usuarios.obtener(veterinario_id) is None:
             raise NotFoundError("Usuario", veterinario_id)
+        duraciones = _Duraciones(self.servicios)
+        if servicio_id is not None:
+            duracion = _servicio_o_error(self.servicios, servicio_id).duracion_min
+        else:
+            duracion = DURACION_POR_DEFECTO
         franjas = [
             f
             for f in self.disponibilidades.listar(veterinario_id)
             if f.dia_semana.value == dia.weekday()
         ]
-        ocupadas = {c.fecha_hora.strftime("%H:%M") for c in self.citas.listar_por_veterinario_y_dia(veterinario_id, dia)}
+        agenda = self.citas.listar_por_veterinario_y_dia(veterinario_id, dia)
 
         libres: list[str] = []
         for franja in franjas:
             actual = datetime.combine(dia, franja.hora_inicio)
             fin = datetime.combine(dia, franja.hora_fin)
             while actual < fin:
-                etiqueta = actual.strftime("%H:%M")
-                if etiqueta not in ocupadas:
-                    libres.append(etiqueta)
+                cabe = franja.cubre(actual, duracion)
+                pisa = any(
+                    se_cruzan(actual, duracion, c.fecha_hora, duraciones.de(c.servicio_id))
+                    for c in agenda
+                )
+                if cabe and not pisa:
+                    libres.append(actual.strftime("%H:%M"))
                 actual += timedelta(minutes=MINUTOS_ENTRE_CITAS)
         return sorted(set(libres))
