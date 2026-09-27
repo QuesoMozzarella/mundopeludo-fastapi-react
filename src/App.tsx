@@ -28,6 +28,7 @@ import { AdopcionesView } from './components/AdopcionesView';
 import { TiendaView } from './components/TiendaView';
 import { HistorialView } from './components/HistorialView';
 import { InventarioView } from './components/InventarioView';
+import { ServiciosView } from './components/ServiciosView';
 import { DashboardView } from './components/DashboardView';
 import { CartModal } from './components/CartModal';
 import { LoginView } from './components/LoginView';
@@ -143,6 +144,8 @@ function Clinica({ currentUser, destinoInicial, onRequiereLogin, onCerrarSesion 
   const [mascotas, setMascotas] = useState<Mascota[]>([]);
   const [especies, setEspecies] = useState<Especie[]>([]);
   const [servicios, setServicios] = useState<Servicio[]>([]);
+  // Lo que se ofrece al público y al agendar: un servicio inactivo no se agenda.
+  const serviciosActivos = servicios.filter((s) => s.activo);
   const [citas, setCitas] = useState<Cita[]>([]);
   const [adopciones, setAdopciones] = useState<Mascota[]>([]);
   const [solicitudes, setSolicitudes] = useState<SolicitudAdopcion[]>([]);
@@ -368,6 +371,10 @@ function Clinica({ currentUser, destinoInicial, onRequiereLogin, onCerrarSesion 
     }
   };
 
+  const recargarServicios = async () => {
+    setServicios(await apiService.getServicios());
+  };
+
   // Inventory operations
   const handleCreateProducto = async (data: Partial<Producto>) => {
     const creado = await apiService.createProducto(data);
@@ -454,7 +461,7 @@ function Clinica({ currentUser, destinoInicial, onRequiereLogin, onCerrarSesion 
             {activeTab === 'inicio' && (
               <HomeView
                 onNavigate={handleNavigate}
-                servicios={servicios}
+                servicios={serviciosActivos}
                 mascotasAdopcion={adopciones}
                 productos={productos}
                 stats={stats}
@@ -466,7 +473,7 @@ function Clinica({ currentUser, destinoInicial, onRequiereLogin, onCerrarSesion 
               <CitasView
                 citas={citas}
                 mascotas={mascotas}
-                servicios={servicios}
+                servicios={serviciosActivos}
                 veterinarios={veterinarios}
                 currentUser={currentUser}
                 onBookCita={handleBookCita}
@@ -533,6 +540,15 @@ function Clinica({ currentUser, destinoInicial, onRequiereLogin, onCerrarSesion 
                 onUpdateProducto={handleUpdateProducto}
                 onDeleteProducto={handleDeleteProducto}
                 onCambiarImagen={handleCambiarImagenProducto}
+              />
+            )}
+
+            {activeTab === 'servicios' && currentUser && currentUser.tipo !== 'cliente' && (
+              <ServiciosView
+                servicios={servicios}
+                veterinarios={veterinarios}
+                currentUser={currentUser}
+                onRecargarServicios={recargarServicios}
               />
             )}
 

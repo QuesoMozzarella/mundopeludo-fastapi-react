@@ -13,7 +13,8 @@ import {
   ShoppingCart,
   ChevronDown,
   LogIn,
-  LogOut
+  LogOut,
+  CalendarClock
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -203,6 +204,17 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </button>
               )}
 
+              {esPersonal && (
+                <button
+                  id="nav-servicios"
+                  onClick={() => setActiveTab('servicios')}
+                  className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5 ${activeTab === 'servicios' ? 'bg-white/20 text-white font-bold shadow-xs' : 'text-white/90 hover:text-white hover:bg-white/10'}`}
+                >
+                  <CalendarClock className="w-4 h-4 text-sky-200" />
+                  <span>Servicios</span>
+                </button>
+              )}
+
               <button
                 id="nav-dashboard"
                 onClick={() => setActiveTab('dashboard')}
@@ -286,6 +298,14 @@ export const Navbar: React.FC<NavbarProps> = ({
             className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap ${activeTab === 'inventario' ? 'bg-[#ff9f43] text-white font-bold' : 'bg-white/10 text-white'}`}
           >
             Inventario
+          </button>
+        )}
+        {esPersonal && (
+          <button
+            onClick={() => setActiveTab('servicios')}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap ${activeTab === 'servicios' ? 'bg-[#ff9f43] text-white font-bold' : 'bg-white/10 text-white'}`}
+          >
+            Servicios
           </button>
         )}
         <button

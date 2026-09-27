@@ -1,6 +1,15 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Cita, Mascota, Servicio, User } from '../types';
 import { formatearFechaHora } from '../formato';
+import { fetchHorasLibres } from '../api';
+
+/** Fecha local "AAAA-MM-DD" dentro de `dias` días (toISOString daría la de UTC). */
+function fechaLocal(dias: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + dias);
+  const dos = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${dos(d.getMonth() + 1)}-${dos(d.getDate())}`;
+}
 import { 
   Calendar, 
   Clock, 
@@ -55,20 +64,51 @@ export const CitasView: React.FC<CitasViewProps> = ({
   const [mascotaId, setMascotaId] = useState<number>(mascotas[0]?.id || 1);
   const [servicioId, setServicioId] = useState<number>(preselectedServicioId || servicios[0]?.id || 1);
   const [veterinarioId, setVeterinarioId] = useState<number>(veterinarios[0]?.id || 2);
-  const [fecha, setFecha] = useState<string>(() => {
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    return tomorrow.toISOString().split('T')[0];
-  });
-  const [hora, setHora] = useState<string>('10:00');
+  const [fecha, setFecha] = useState<string>(() => fechaLocal(1));
+  const [hora, setHora] = useState<string>('');
   const [motivo, setMotivo] = useState<string>('');
   const [peso, setPeso] = useState<number>(10);
   const [notas, setNotas] = useState<string>('');
+  // null mientras se consultan; [] si ese día no hay huecos.
+  const [horasLibres, setHorasLibres] = useState<string[] | null>(null);
+  const [errorHoras, setErrorHoras] = useState<string | null>(null);
+  const [consultaHoras, setConsultaHoras] = useState(0);
 
-  const horasDisponibles = [
-    '09:00', '09:45', '10:30', '11:15', '12:00', 
-    '14:30', '15:15', '16:00', '17:00', '18:00'
-  ];
+  // Sólo los veterinarios que prestan el servicio (sin asignados, todos).
+  const servicioElegido = servicios.find((s) => s.id === servicioId);
+  const veterinariosDelServicio = veterinarios.filter(
+    (v) => !servicioElegido?.veterinarios_ids?.length || servicioElegido.veterinarios_ids.includes(v.id)
+  );
+
+  useEffect(() => {
+    if (veterinariosDelServicio.length && !veterinariosDelServicio.some((v) => v.id === veterinarioId)) {
+      setVeterinarioId(veterinariosDelServicio[0].id);
+    }
+  }, [servicioId, veterinarios]);
+
+  // Las horas salen de la agenda del veterinario: sus franjas, sin las citas
+  // que ya ocupan el día y sólo donde cabe la duración del servicio.
+  useEffect(() => {
+    if (!modalOpen || !fecha || !veterinarioId) return;
+    let vigente = true;
+    setHorasLibres(null);
+    setErrorHoras(null);
+    fetchHorasLibres(veterinarioId, fecha, servicioId)
+      .then((horas) => {
+        if (!vigente) return;
+        setHorasLibres(horas);
+        setHora((actual) => (horas.includes(actual) ? actual : horas[0] ?? ''));
+      })
+      .catch((err) => {
+        if (!vigente) return;
+        setHorasLibres([]);
+        setHora('');
+        setErrorHoras(err.message || 'No se pudieron consultar las horas libres.');
+      });
+    return () => {
+      vigente = false;
+    };
+  }, [modalOpen, veterinarioId, fecha, servicioId, consultaHoras]);
 
   // Filter citas based on role and tab
   const filteredCitas = citas.filter((c) => {
@@ -93,6 +133,10 @@ export const CitasView: React.FC<CitasViewProps> = ({
       setErrorMsg('Por favor describe el motivo de la cita médica.');
       return;
     }
+    if (!hora) {
+      setErrorMsg('Elige una hora libre.');
+      return;
+    }
 
     try {
       setIsSubmitting(true);
@@ -112,6 +156,8 @@ export const CitasView: React.FC<CitasViewProps> = ({
       setNotas('');
     } catch (err: any) {
       setErrorMsg(err.message || 'Error al agendar la cita.');
+      // Quizá alguien ocupó la hora mientras tanto: se vuelven a pedir.
+      setConsultaHoras((n) => n + 1);
     } finally {
       setIsSubmitting(false);
     }
@@ -306,6 +352,7 @@ export const CitasView: React.FC<CitasViewProps> = ({
                 <h3 className="font-bold text-lg">Agendar Cita Médica</h3>
               </div>
               <button 
+                id="btn-cerrar-modal-cita"
                 onClick={() => setModalOpen(false)}
                 className="text-slate-400 hover:text-white p-1 rounded-lg"
               >
@@ -372,7 +419,7 @@ export const CitasView: React.FC<CitasViewProps> = ({
                   onChange={(e) => setVeterinarioId(Number(e.target.value))}
                   className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white"
                 >
-                  {veterinarios.map((v) => (
+                  {veterinariosDelServicio.map((v) => (
                     <option key={v.id} value={v.id}>
                       {v.nombre} {v.apellidos} ({v.especialidad || 'Veterinario General'})
                     </option>
@@ -391,6 +438,7 @@ export const CitasView: React.FC<CitasViewProps> = ({
                     id="input-cita-fecha"
                     value={fecha}
                     onChange={(e) => setFecha(e.target.value)}
+                    min={fechaLocal(0)}
                     className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
                     required
                   />
@@ -403,12 +451,24 @@ export const CitasView: React.FC<CitasViewProps> = ({
                     id="select-cita-hora"
                     value={hora}
                     onChange={(e) => setHora(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white"
+                    disabled={!horasLibres?.length}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white disabled:bg-slate-50 disabled:text-slate-400"
                   >
-                    {horasDisponibles.map((h) => (
-                      <option key={h} value={h}>{h} hrs</option>
-                    ))}
+                    {horasLibres === null ? (
+                      <option value="">Consultando…</option>
+                    ) : horasLibres.length === 0 ? (
+                      <option value="">Sin horas libres</option>
+                    ) : (
+                      horasLibres.map((h) => (
+                        <option key={h} value={h}>{h} hrs</option>
+                      ))
+                    )}
                   </select>
+                  {horasLibres?.length === 0 && (
+                    <p id="aviso-sin-horas" className="text-[11px] text-slate-500 mt-1">
+                      {errorHoras || 'Este veterinario no tiene huecos para este servicio ese día. Prueba otra fecha u otro especialista.'}
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -471,7 +531,7 @@ export const CitasView: React.FC<CitasViewProps> = ({
                 <button
                   type="submit"
                   id="btn-submit-cita"
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || !hora}
                   className="px-5 py-2 rounded-xl bg-[#ff9f43] hover:bg-[#f08e30] text-white text-sm font-bold shadow-sm transition-colors disabled:opacity-50"
                 >
                   {isSubmitting ? 'Guardando...' : 'Confirmar Cita'}

@@ -31,7 +31,20 @@ export interface Servicio {
   duracion_min: number;
   // Sin precio publicado, no llega.
   precio?: number;
+  // Vacío: lo puede prestar cualquier veterinario.
+  veterinarios_ids: number[];
   activo: number;
+}
+
+/** Franja semanal de atención de un veterinario (0 = lunes … 6 = domingo). */
+export interface Disponibilidad {
+  id: number;
+  veterinario_id: number;
+  veterinario_nombre: string;
+  dia_semana: number;
+  dia: string;
+  hora_inicio: string; // "HH:MM:SS"
+  hora_fin: string;
 }
 
 export interface Mascota {

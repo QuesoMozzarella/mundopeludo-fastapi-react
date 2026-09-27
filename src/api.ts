@@ -1,5 +1,5 @@
 import {
-  User, Especie, Mascota, SolicitudAdopcion, Servicio,
+  User, Especie, Mascota, SolicitudAdopcion, Servicio, Disponibilidad,
   Cita, HistorialMedico, Producto, DashboardStats, Sesion
 } from './types';
 
@@ -295,6 +295,54 @@ export async function fetchEspecies(): Promise<Especie[]> {
 
 export async function fetchServicios(): Promise<Servicio[]> {
   return request<Json[]>('/servicios').then(lista(aServicio));
+}
+
+// Alta y edición de servicios (sólo administradores).
+export type ServicioDatos = {
+  nombre: string;
+  descripcion?: string | null;
+  precio: number | null;
+  duracion_min: number;
+  activo: boolean;
+  veterinarios_ids: number[];
+};
+
+export async function createServicio(data: ServicioDatos): Promise<Servicio> {
+  return aServicio(await request<Json>('/servicios', { method: 'POST', body: JSON.stringify(data) }));
+}
+
+export async function updateServicio(id: number, data: Partial<ServicioDatos>): Promise<Servicio> {
+  return aServicio(await request<Json>(`/servicios/${id}`, { method: 'PUT', body: JSON.stringify(data) }));
+}
+
+export async function deleteServicio(id: number): Promise<void> {
+  await request(`/servicios/${id}`, { method: 'DELETE' });
+}
+
+// Horario de atención: cada veterinario el suyo; el administrador, el de todos.
+export async function fetchDisponibilidades(veterinarioId?: number): Promise<Disponibilidad[]> {
+  const q = veterinarioId ? `?veterinario_id=${veterinarioId}` : '';
+  return request(`/disponibilidades${q}`);
+}
+
+export async function createDisponibilidad(data: {
+  veterinario_id: number;
+  dia_semana: number;
+  hora_inicio: string;
+  hora_fin: string;
+}): Promise<Disponibilidad> {
+  return request('/disponibilidades', { method: 'POST', body: JSON.stringify(data) });
+}
+
+export async function deleteDisponibilidad(id: number): Promise<void> {
+  await request(`/disponibilidades/${id}`, { method: 'DELETE' });
+}
+
+/** Horas ("HH:MM") en que cabe una cita del servicio con ese veterinario ese día. */
+export async function fetchHorasLibres(veterinarioId: number, dia: string, servicioId?: number): Promise<string[]> {
+  const params = new URLSearchParams({ dia });
+  if (servicioId) params.append('servicio_id', String(servicioId));
+  return request(`/veterinarios/${veterinarioId}/agenda?${params.toString()}`);
 }
 
 // ---------------------------------------------------------------------------
