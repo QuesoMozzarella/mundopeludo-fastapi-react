@@ -27,6 +27,8 @@ ENV/
 backend/data/*.db
 backend/data/*.db-wal
 backend/data/*.db-shm
+# Base de la versión plana anterior de la API: se conserva en disco, fuera de git.
+backend/mundopeludo.db
 
 # === CARPETA LEGACY DJANGO (Aislada para no afectar el repo original) ===
 legacy_django/
