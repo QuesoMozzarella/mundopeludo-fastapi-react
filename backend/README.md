@@ -118,6 +118,7 @@ en `.gitignore`: las credenciales nunca van al repositorio.
 | `MP_EMAIL_USE_TLS` | `1` | STARTTLS en puertos distintos de 465 |
 | `MP_EMAIL_USER` / `MP_EMAIL_PASSWORD` | vacío | Credenciales SMTP. En Gmail, una *contraseña de aplicación* |
 | `MP_EMAIL_FROM` | `MP_EMAIL_USER` | Remitente visible |
+| `MP_EMAIL_REDIRIGIR_A` | vacío | **Sólo desarrollo**: todos los correos van a esta dirección y el destinatario real queda en el asunto (`[Para …]`) y en la cabecera `X-MundoPeludo-Destinatario-Original`. Con `MP_ENV=produccion` la app no arranca si está definida |
 
 ---
 
@@ -165,9 +166,16 @@ Los **15 modelos** del proyecto original están cubiertos:
 
 ### Diferencias deliberadas
 
-* **`Servicio` no tiene `precio` ni `duracion`**: la migración
-  `0007_remove_servicio_duracion_remove_servicio_precio` los eliminó del modelo
-  Django, y aquí se respeta esa decisión.
+* **`Servicio` recupera `precio` y `duracion_min`**, que la migración
+  `0007_remove_servicio_duracion_remove_servicio_precio` había eliminado del
+  modelo Django. El precio es opcional (`null`: sin precio publicado; en un
+  `PUT`, `null` lo retira) y la duración va de 5 a 480 minutos, 30 por defecto.
+  La duración decide la agenda, como hacía el formulario de Django antes de
+  la 0007: cada cita ocupa `[inicio, inicio + duración)` de su servicio, no
+  puede pisar otra ni salirse de la franja del veterinario, y
+  `GET /api/veterinarios/{id}/agenda?servicio_id=` sólo ofrece los huecos donde
+  cabe entera. Las bases anteriores se migran solas: sus servicios quedan sin
+  precio y con 30 minutos, lo que ocupaba hasta ahora cada cita.
 * **`Producto.TAMANO_CHOICES` y `EDAD_CHOICES`** estaban declaradas en Django
   pero ningún campo las usaba; no se han portado.
 * **`Pedido` / `PedidoItem` son una extensión**: no existían en Django, pero el
@@ -275,7 +283,8 @@ pytest backend/tests                 # si tienes pytest instalado
 
 Cubren el registro y login, la recuperación de contraseña, las validaciones de
 mascota, el flujo completo de adopción, la agenda con solapes y
-disponibilidad, la generación de SKU, el control de stock, la subida de
+disponibilidad, el precio y la duración de los servicios (y su migración), la
+redirección de correos en desarrollo, la generación de SKU, el control de stock, la subida de
 imágenes, el carrito, la atomicidad del checkout, la autorización por rol y
 por propietario, el bloqueo del código de recuperación por fuerza bruta, la
 reprogramación de citas, las fechas con zona horaria, el contrato con el

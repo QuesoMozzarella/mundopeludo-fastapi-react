@@ -2,6 +2,21 @@
 
 Última actualización: 26-09-2026. Punto de partida para retomar el trabajo.
 
+## Hoja de ruta
+
+| Fase | Contenido | Estado |
+|---|---|---|
+| 1 | Repositorios tipados con puertos; roles con enum (SOLID) | ✅ Hecha (`c5a9f1f`) |
+| 2 | El dominio recibe el reloj por el puerto `Clock` | ✅ Hecha (`4a657cf`) |
+| 3 | Casos de uso inyectados (3a) y comandos tipados `*Cmd` (3b) | ✅ Hecha (`709f5ab`, `dac304e`) |
+| 4 | Un caso de uso por intención | ✅ Hecha (`1edf68d`) |
+| 5 | Cierre de la primera lista de pendientes: imágenes de producto por archivo, precio y duración de servicios, `MP_EMAIL_REDIRIGIR_A`, 7 escenarios e2e nuevos, CI en GitHub Actions, base antigua fuera de git | ✅ Hecha, **sin commit** |
+| 6 | Agenda: citas canceladas que ocupan hueco (pendiente 2), horas reales en el formulario de citas (4), pantalla de servicios (3) | ⏳ Siguiente |
+| 7 | Despliegue: primera ejecución de CI verificada (1) y lista de producción (5) | ⏳ Por hacer |
+
+Las fases 6 y 7 son una propuesta de orden; los números entre paréntesis
+remiten a la sección *Pendientes*.
+
 ## Dónde estamos
 
 - **Backend (FastAPI + SQLite, arquitectura hexagonal):** completo. Las cuatro
@@ -12,63 +27,56 @@
      comandos tipados (`*Cmd`) en lugar de `dict`.
   4. Un caso de uso por intención (`Consultar*`, `Crear*`, `Eliminar*`…).
   Convenciones: [`backend/README.md`](./backend/README.md#convenciones-de-la-capa-de-aplicación).
+- **Servicios con precio y duración:** se recuperaron los campos que quitó la
+  migración 0007 del Django. La duración decide la agenda: cada cita ocupa lo
+  que dura su servicio y no puede pisar otra ni salirse de la franja del
+  veterinario. Las bases existentes se migran solas.
 - **Seguridad:** API cerrada por defecto (`MP_REQUIRE_AUTH=1`), permisos por
   rol y por propietario, bloqueo tras 5 logins fallidos, códigos de
   recuperación con límite de intentos, primer administrador por consola
   (`python backend/crear_superusuario.py`).
 - **Correo (SMTP):** código de recuperación y avisos de cita confirmada, cita
   cancelada e historia clínica al tutor, enviados tras el commit y en segundo
-  plano.
+  plano. En desarrollo, `MP_EMAIL_REDIRIGIR_A` manda todos a una sola
+  dirección (prohibida en producción).
 - **Frontend (React):** login con JWT; inicio, adopciones y tienda públicos;
-  el resto pide sesión. Consume los datos reales de la API a través de los
-  adaptadores de `src/api.ts`.
-- **Pruebas:** 36 de la API (`python backend/tests/test_api.py`) y 21
-  escenarios e2e con Playwright (`npm run test:e2e`).
+  el resto pide sesión. El inventario sube las imágenes de producto como
+  archivo (con vista previa) y al cambiarla retira la anterior.
+- **Pruebas:** 40 de la API (`python backend/tests/test_api.py`) y 28
+  escenarios e2e con Playwright (`npm run test:e2e`; `E2E_HEADLESS=1` sin
+  ventana). GitHub Actions las ejecuta en cada push a `main` y en cada PR
+  (`.github/workflows/pruebas.yml`).
+- **Repositorio:** `backend/mundopeludo.db` (la base anterior) ya no se versiona.
 
 ## Pendientes
 
-### 1. Imágenes de producto desde el inventario
-El formulario de Inventario pide una **URL de imagen**, pero la API guarda las
-imágenes de producto subiéndolas en base64 (`POST /api/productos/{id}/imagenes`)
-y la URL se descarta. Hay que decidir:
-- **a)** añadir en el formulario la subida de archivo que ya soporta la API, o
-- **b)** aceptar también una URL externa, como ya hacen las mascotas (`imagen_url`).
+### 1. Comprobar la primera ejecución de CI
+El workflow está escrito pero todavía no ha corrido en GitHub. Tras el primer
+push, revisar la pestaña *Actions*: si las e2e fallan allí y no en local, las
+trazas quedan en el artefacto `trazas-e2e`.
 
-La tienda ya muestra las imágenes subidas (`/api/imagenes/{id}`).
+### 2. Las citas canceladas siguen ocupando la agenda
+`ReglasDeAgenda.horario` compara con todas las citas del día del veterinario,
+también las **canceladas**, así que una cita anulada bloquea su hueco. Ya pasaba
+antes; con la duración real de los servicios (una cirugía ocupa 2 horas) se nota
+más. Probablemente haya que excluir el estado `Cancelada` en
+`listar_por_veterinario_y_dia` o en la regla.
 
-### 2. Precio y duración de los servicios
-`Servicio` no tiene `precio` ni `duracion_min`: la migración
-`0007_remove_servicio_duracion_remove_servicio_precio` del Django los eliminó y
-la API respeta esa decisión. El frontend sólo los muestra si llegan, así que hoy
-no aparecen. Si se quieren de vuelta, es un cambio de modelo (dominio, tabla,
-migración, esquemas).
+### 3. Gestión de servicios desde la app
+Precio y duración sólo se editan por la API (`POST/PUT /api/servicios`, o desde
+Swagger en `/docs`): el frontend no tiene pantalla de servicios.
 
-### 3. Correos en desarrollo
-Con el SMTP configurado en `.env`, confirmar citas o registrar historias en local
-envía correos **reales** al tutor. Las cuentas de `seed.py` (`@example.com`) no
-existen y Gmail devuelve el correo a `sistema.mundopeludo@gmail.com`.
-Propuesta: una variable (p. ej. `MP_EMAIL_REDIRIGIR_A`) que, fuera de
-producción, mande todos los correos a una sola dirección.
+### 4. Horas del formulario de citas
+El formulario ofrece horas fijas (09:00, 09:45, 10:30…) en vez de preguntar a
+`GET /api/veterinarios/{id}/agenda?servicio_id=`, que ya devuelve los huecos
+donde cabe el servicio elegido. Requiere que los veterinarios tengan
+disponibilidad declarada: `seed.py` no crea ninguna.
 
-### 4. Más escenarios e2e
-Cubiertos: visitante, autenticación, cliente (citas, compra, adopción) y
-personal (panel, confirmar cita). Faltan, por ejemplo:
-- recuperación de contraseña de principio a fin (con `codigo_debug`);
-- registrar una historia clínica y verla desde el cliente;
-- aprobar / rechazar una solicitud de adopción (cuidado: aprobarla transfiere
-  la mascota y cambia los datos que usan otras pruebas);
-- crear, editar y desactivar productos en Inventario;
-- registrar una mascota con descripción e imagen.
-
-### 5. Integración continua
-Nada ejecuta las pruebas automáticamente. En un servidor de CI las e2e tendrían
-que ir con `headless: true` (no hay pantalla), por ejemplo con una variable que
-cambie esa opción en `playwright.config.ts`.
-
-### 6. Antes de desplegar
-- `MP_ENV=produccion`: la app exige entonces `MP_SECRET_KEY` propia.
+### 5. Antes de desplegar
+- `MP_ENV=produccion`: la app exige entonces `MP_SECRET_KEY` propia y rechaza
+  `MP_EMAIL_REDIRIGIR_A`.
 - `MP_CORS_ORIGINS` con el dominio real en lugar de `*`.
 - No usar `seed.py`: sus cuentas tienen una contraseña conocida.
 - Crear el administrador con `crear_superusuario.py`.
-- `backend/mundopeludo.db` (la base de la versión anterior) sigue versionada;
-  valorar sacarla del repositorio (`git rm --cached`).
+- `backend/mundopeludo.db` salió del índice, pero sigue en el historial de git;
+  si tuviera datos sensibles habría que reescribir el historial.

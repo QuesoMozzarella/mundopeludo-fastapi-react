@@ -124,7 +124,8 @@ python backend/tests/test_api.py      # pruebas de la API, sin dependencias extr
 
 Las pruebas e2e abren el navegador **visible** (`headless: false`) y no descargan
 ninguno: usan Brave o Chrome si están instalados, o Edge, que trae Windows.
-Para forzar otro, define `E2E_NAVEGADOR` con la ruta al ejecutable.
+Para forzar otro, define `E2E_NAVEGADOR` con la ruta al ejecutable, y para
+ejecutarlas sin ventana, `E2E_HEADLESS=1`.
 
 Levantan su propio entorno y **nunca tocan el de desarrollo**:
 
@@ -133,9 +134,19 @@ Levantan su propio entorno y **nunca tocan el de desarrollo**:
 * frontend en el **3100**, apuntando a ese backend (`FASTAPI_PORT`,
   `FASTAPI_EXTERNO=1`).
 
-Escenarios en `e2e/`: visitante (`publico`), `autenticacion`, `cliente` y
-`personal`. Tras un fallo, la traza queda en `test-results/`
+Escenarios en `e2e/`: visitante (`publico`), `autenticacion` (incluida la
+recuperación de contraseña), `cliente` (citas, compra, adopción, alta de
+mascota) y `personal` (panel, citas, historia clínica, inventario con imágenes,
+aprobar y rechazar adopciones). Tras un fallo, la traza queda en `test-results/`
 (`npx playwright show-trace <ruta>/trace.zip`).
+
+### Integración continua
+
+[`.github/workflows/pruebas.yml`](./.github/workflows/pruebas.yml) ejecuta en
+GitHub Actions, en cada push a `main` y en cada pull request, las pruebas de la
+API, el chequeo de tipos del frontend (`npm run lint`) y las e2e. Allí no hay
+pantalla: con `CI=true` Playwright usa su propio Chromium en modo headless, y
+si algo falla las trazas quedan como artefacto (`trazas-e2e`).
 
 Lo que queda por hacer está en [`PENDIENTES.md`](./PENDIENTES.md).
 
@@ -145,5 +156,6 @@ Lo que queda por hacer está en [`PENDIENTES.md`](./PENDIENTES.md).
 
 La implementación anterior basada en Django 5.2 y MySQL ha sido preservada de forma íntegra en la carpeta [`legacy_django/`](./legacy_django/), junto con sus instrucciones y migraciones originales.
 
-> `backend/mundopeludo.db` es la base de la versión plana anterior de la API y
-> se conserva tal cual; la nueva se genera en `backend/data/mundopeludo.db`.
+> `backend/mundopeludo.db` es la base de la versión plana anterior de la API. Ya
+> no se versiona (está en `.gitignore`), pero quien la tenga en disco la
+> conserva; la nueva se genera en `backend/data/mundopeludo.db`.
